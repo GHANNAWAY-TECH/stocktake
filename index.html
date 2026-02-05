@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stocktake Pro</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-slate-950 text-white min-h-screen p-4">
+<div class="max-w-md mx-auto">
+
+<h1 class="text-2xl font-black mb-4 text-blue-400">STOCKTAKE PRO</h1>
+
+<!-- CAMERA -->
+<div class="rounded-2xl overflow-hidden border border-white/10 mb-4">
+    <video id="video" autoplay playsinline class="w-full h-[420px] object-cover"></video>
+</div>
+
+<canvas id="canvas" class="hidden"></canvas>
+
+<button id="scanBtn"
+class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold mb-4">
+Scan Item
+</button>
+
+<!-- RESULTS -->
+<div id="output" class="space-y-2"></div>
+
+</div>
+
+<script>
+/* ======================
+   CONFIG
+====================== */
+const WORKER_URL = "https://YOUR-WORKER.workers.dev/scan";
+
+/* ======================
+   CAMERA
+====================== */
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const output = document.getElementById("output");
+const scanBtn = document.getElementById("scanBtn");
+
+let inventory = {};
+
+async function initCamera() {
+    const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" }
+    });
+    video.srcObject = stream;
+}
+initCamera();
+
+/* ======================
+   SCAN
+====================== */
+scanBtn.onclick = async () => {
+    scanBtn.disabled = true;
+    scanBtn.innerText = "Scanning...";
+
+    canvas.width = 720;
+    canvas.height = 900;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const image = canvas.toDataURL("image/jpeg", 0.7).split(",")[1];
+
+    try {
+        const res = await fetch(WORKER_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image })
+        });
+
+        const data = await res.json();
+        addItem(data.result || "Unknown");
+    } catch {
+        alert("Scan failed");
+    }
+
+    scanBtn.disabled = false;
+    scanBtn.innerText = "Scan Item";
+};
+
+/* ======================
+   INVENTORY
+====================== */
+function addItem(name) {
+    inventory[name] = (inventory[name] || 0) + 1;
+    render();
+}
+
+function render() {
+    output.innerHTML = "";
+    Object.entries(inventory).forEach(([name, qty]) => {
+        output.innerHTML += `
+        <div class="flex justify-between bg-white/5 p-3 rounded-xl">
+            <span class="font-bold text-sm">${name}</span>
+            <span class="text-blue-400 font-black">${qty}</span>
+        </div>`;
+    });
+}
+</script>
+</body>
+</html>
