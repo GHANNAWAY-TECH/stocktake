@@ -3,324 +3,251 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Stocktake Pro - Multi-Scan</title>
+    <title>Stocktake Pro - Interactive Scanner</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        :root {
-            --brand-blue: #3b82f6;
-        }
-        .glass-morphism {
-            background: rgba(15, 23, 42, 0.7);
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        #video-container {
-            position: relative;
-            overflow: hidden;
-            border-radius: 1.5rem;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-        }
+        :root { --brand-blue: #3b82f6; }
+        .glass { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        
         .scanning-line {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 4px;
+            position: absolute; top: 0; left: 0; width: 100%; height: 4px;
             background: linear-gradient(to bottom, transparent, var(--brand-blue));
             box-shadow: 0 0 20px var(--brand-blue);
             animation: scan 2s ease-in-out infinite;
-            display: none;
-            z-index: 10;
+            display: none; z-index: 10;
         }
-        @keyframes scan {
-            0%, 100% { top: 5%; opacity: 0.2; }
-            50% { top: 95%; opacity: 1; }
-        }
-        .shutter-flash {
-            position: absolute;
-            inset: 0;
-            background: white;
-            opacity: 0;
-            pointer-events: none;
-            z-index: 20;
-        }
-        .flash-active {
-            animation: flash 0.3s ease-out;
-        }
-        @keyframes flash {
-            0% { opacity: 0.8; }
-            100% { opacity: 0; }
-        }
-        .selection-modal {
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
+        @keyframes scan { 0%, 100% { top: 5%; opacity: 0.2; } 50% { top: 95%; opacity: 1; } }
+        
+        .shutter-flash { position: absolute; inset: 0; background: white; opacity: 0; pointer-events: none; z-index: 20; }
+        .flash-active { animation: flash 0.3s ease-out; }
+        @keyframes flash { 0% { opacity: 0.8; } 100% { opacity: 0; } }
+
+        .item-row { animation: slideUp 0.3s ease-out forwards; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
-    <div class="max-w-md mx-auto p-4 pb-32">
+    <div class="max-w-md mx-auto p-4 pb-40">
         <!-- Header -->
         <header class="flex justify-between items-center mb-6 pt-4">
             <div>
-                <h1 class="text-2xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">
-                    MULTI-SCAN
-                </h1>
+                <h1 class="text-2xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">STOCKTAKE PRO</h1>
                 <div class="flex items-center gap-2 mt-1">
-                    <span id="status-dot" class="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span>
-                    <span id="status-text" class="text-[10px] font-bold uppercase tracking-widest text-slate-500">Connecting Camera</span>
+                    <span id="status-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span id="status-text" class="text-[10px] font-bold uppercase tracking-widest text-slate-500">System Ready</span>
                 </div>
             </div>
-            <button id="history-toggle" class="p-2 glass-morphism rounded-lg text-slate-400">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+            <button id="switch-camera" class="p-2 glass rounded-lg text-slate-400 hover:text-white transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
             </button>
         </header>
 
-        <!-- Camera Section -->
-        <div id="video-container" class="aspect-square bg-slate-900 mb-6 relative ring-1 ring-white/10">
+        <!-- Camera Container -->
+        <div id="video-container" class="aspect-[4/3] bg-slate-900 mb-4 relative rounded-3xl overflow-hidden ring-1 ring-white/10 shadow-2xl">
             <video id="video" autoplay playsinline class="w-full h-full object-cover"></video>
             <canvas id="canvas" class="hidden"></canvas>
             <div id="shutter-effect" class="shutter-flash"></div>
             <div id="scanning-overlay" class="scanning-line"></div>
             
-            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div class="w-4/5 h-4/5 border-2 border-dashed border-white/20 rounded-3xl"></div>
-            </div>
-        </header>
-
-        <!-- Controls -->
-        <div class="grid grid-cols-4 gap-3 mb-8">
-            <button id="capture-btn" class="col-span-3 bg-blue-600 hover:bg-blue-500 active:scale-[0.98] transition-all py-4 rounded-2xl font-bold flex items-center justify-center gap-3">
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                Scan All Visible
-            </button>
-            <button id="switch-camera" class="glass-morphism rounded-2xl flex items-center justify-center text-slate-300">
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-            </button>
-        </div>
-
-        <!-- Inventory List -->
-        <div class="space-y-4">
-            <div class="flex justify-between items-center">
-                <h2 class="text-lg font-bold">Audited Inventory</h2>
-                <button id="clear-list" class="text-[10px] font-bold text-slate-600">Clear</button>
-            </div>
-            <div id="inventory-list" class="space-y-2">
-                <div class="text-center py-10 opacity-30 text-sm italic">Inventory is currently empty...</div>
+            <!-- Focus Guide -->
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+                <div class="w-48 h-48 border border-white rounded-2xl"></div>
             </div>
         </div>
-    </div>
 
-    <!-- Multi-Selection Modal -->
-    <div id="selection-modal" class="fixed inset-0 z-[100] bg-black/90 flex flex-col hidden selection-modal translate-y-full">
-        <div class="p-6 pt-12 flex-1 overflow-y-auto">
-            <h2 class="text-2xl font-black mb-2">Items Detected</h2>
-            <p class="text-slate-400 text-sm mb-6">Select the items you want to add to the count.</p>
-            
-            <div id="detection-results" class="space-y-3">
+        <!-- Trigger Button -->
+        <button id="capture-btn" class="w-full bg-blue-600 hover:bg-blue-500 active:scale-[0.98] transition-all py-5 rounded-2xl font-black flex items-center justify-center gap-3 mb-8 shadow-xl shadow-blue-900/30">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            SCAN VISIBLE ITEMS
+        </button>
+
+        <!-- REVIEW LIST (Visible after scan) -->
+        <div id="selection-area" class="hidden space-y-4 mb-10 item-row">
+            <div class="flex justify-between items-center px-1 border-b border-white/5 pb-2">
+                <h2 class="text-xs font-black uppercase tracking-[0.2em] text-blue-400">Review Results</h2>
+                <span class="text-[10px] text-slate-500 font-bold">SELECT TO ADD</span>
+            </div>
+            <div id="detection-results" class="space-y-2 max-h-60 overflow-y-auto pr-1">
                 <!-- AI results populated here -->
             </div>
+            <div class="flex gap-2 pt-2">
+                <button id="cancel-selection" class="flex-1 py-4 rounded-xl bg-slate-800 text-[10px] font-black uppercase tracking-widest text-slate-400">Discard</button>
+                <button id="confirm-selection" class="flex-[2] py-4 rounded-xl bg-emerald-600 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-900/20">Add to Count</button>
+            </div>
         </div>
-        <div class="p-6 glass-morphism border-t border-white/10 flex gap-3">
-            <button id="cancel-selection" class="flex-1 py-4 rounded-2xl font-bold bg-slate-800 text-slate-300">Cancel</button>
-            <button id="confirm-selection" class="flex-[2] py-4 rounded-2xl font-bold bg-emerald-600 text-white">Add Selected Items</button>
-        </div>
-    </div>
 
-    <!-- History Panel -->
-    <div id="history-panel" class="fixed inset-0 z-[80] bg-slate-950 p-6 hidden translate-x-full transition-transform">
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-xl font-bold">Audit Logs</h2>
-            <button id="history-close" class="p-2">✕</button>
-        </div>
-        <div id="history-content" class="space-y-3"></div>
-    </div>
-
-    <!-- Status Bar -->
-    <div class="fixed bottom-0 left-0 right-0 p-6 glass-morphism border-t border-white/5 z-[70]">
-        <div class="max-w-md mx-auto flex justify-between items-center">
-            <div>
-                <p class="text-[10px] uppercase font-bold text-slate-500">Current Total</p>
-                <div class="flex items-baseline gap-1">
-                    <span id="total-units" class="text-3xl font-black">0</span>
-                    <span class="text-xs text-slate-500 font-bold uppercase">Units</span>
+        <!-- MASTER INVENTORY LIST -->
+        <div class="space-y-4">
+            <div class="flex justify-between items-center px-1">
+                <h2 class="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Inventory Batch</h2>
+                <button id="clear-list" class="text-[10px] font-black uppercase text-red-500 hover:underline">Clear All</button>
+            </div>
+            <div id="inventory-list" class="space-y-3">
+                <!-- Confirmed items here -->
+                <div class="text-center py-12 glass rounded-3xl border-dashed border-white/10">
+                    <p class="text-slate-600 text-[10px] font-black uppercase tracking-widest">No stock scanned yet</p>
                 </div>
             </div>
-            <button id="export-btn" class="bg-emerald-600 px-6 py-3 rounded-xl font-bold text-sm">Finish & Export</button>
+        </div>
+    </div>
+
+    <!-- Fixed Action Bar -->
+    <div class="fixed bottom-0 left-0 right-0 p-6 glass border-t border-white/5 z-50">
+        <div class="max-w-md mx-auto flex justify-between items-center">
+            <div>
+                <p class="text-[10px] uppercase font-black tracking-widest text-slate-500 mb-1">Total Items</p>
+                <div class="flex items-baseline gap-1">
+                    <span id="total-units" class="text-4xl font-black leading-none">0</span>
+                    <span class="text-[10px] font-bold text-slate-600 uppercase">Qty</span>
+                </div>
+            </div>
+            <button id="export-btn" class="bg-white text-black px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-transform">Export CSV</button>
         </div>
     </div>
 
     <script>
-        const apiKey = "AIzaSyBmQxyufxK_d_hTNbNHDDqKHzGRvapfGH8"; // Set by environment
+        const apiKey = "AIzaSyBmQxyufxK_d_hTNbNHDDqKHzGRvapfGH8";
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const captureBtn = document.getElementById('capture-btn');
-        const inventoryList = document.getElementById('inventory-list');
-        const selectionModal = document.getElementById('selection-modal');
+        const selectionArea = document.getElementById('selection-area');
         const detectionResults = document.getElementById('detection-results');
-        
+        const inventoryList = document.getElementById('inventory-list');
+        const totalUnitsEl = document.getElementById('total-units');
+
         let inventory = {};
-        let auditLog = [];
-        let currentStream = null;
+        let currentScanResults = [];
         let useFrontCamera = false;
-        let detectedItemsBatch = [];
 
         async function initCamera() {
-            updateStatus("Adjusting Sensor", "bg-yellow-500");
-            if (currentStream) currentStream.getTracks().forEach(t => t.stop());
-            
+            if (window.stream) window.stream.getTracks().forEach(track => track.stop());
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: useFrontCamera ? 'user' : 'environment' }
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: useFrontCamera ? 'user' : 'environment' } 
                 });
-                currentStream = stream;
+                window.stream = stream;
                 video.srcObject = stream;
-                video.onloadedmetadata = () => {
-                    video.play();
-                    updateStatus("Ready to Scan", "bg-emerald-500");
-                };
-            } catch (err) {
+            } catch (err) { 
                 updateStatus("Camera Error", "bg-red-500");
             }
         }
 
-        function updateStatus(text, color) {
+        function updateStatus(text, colorClass) {
             document.getElementById('status-text').innerText = text;
-            document.getElementById('status-dot').className = `w-2 h-2 rounded-full ${color}`;
+            document.getElementById('status-dot').className = `w-2 h-2 rounded-full ${colorClass}`;
         }
 
-        async function analyzeScene(base64Image) {
-            const systemPrompt = `You are an inventory vision assistant. 
-Examine the image and identify EVERY beverage container (bottle, can, box).
-Return a JSON object with an array called "items" where each object has "name" and "confidence" (0-1).
-Example: {"items": [{"name": "Corona 330ml", "confidence": 0.98}, {"name": "Jack Daniels 70cl", "confidence": 0.95}]}
-If no beverages are found, return {"items": []}. Only identify beverages.`;
-
+        async function analyzeImage(base64) {
+            const systemPrompt = `You are a Stock Auditor. Identify EVERY visible beverage (bottle/can). 
+            Be specific with brands (e.g., 'Heineken 330ml', 'Grey Goose 70cl'). 
+            Return ONLY a valid JSON: {"items": [{"name": "Product Name"}]}`;
+            
             try {
                 const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        contents: [{
-                            parts: [
-                                { text: "What drinks are visible in this photo?" },
-                                { inlineData: { mimeType: "image/jpeg", data: base64Image } }
-                            ]
-                        }],
+                        contents: [{ parts: [{ text: "What is visible?" }, { inlineData: { mimeType: "image/jpeg", data: base64 } }] }],
                         systemInstruction: { parts: [{ text: systemPrompt }] },
                         generationConfig: { responseMimeType: "application/json" }
                     })
                 });
-
                 const data = await response.json();
-                const jsonText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                return JSON.parse(jsonText).items || [];
-            } catch (err) {
-                console.error(err);
-                return [];
+                return JSON.parse(data.candidates[0].content.parts[0].text).items || [];
+            } catch (e) { 
+                console.error("AI Error:", e);
+                return []; 
             }
         }
 
         captureBtn.addEventListener('click', async () => {
-            if (captureBtn.disabled) return;
-            
             document.getElementById('shutter-effect').classList.add('flash-active');
             setTimeout(() => document.getElementById('shutter-effect').classList.remove('flash-active'), 300);
             
             document.getElementById('scanning-overlay').style.display = 'block';
             captureBtn.disabled = true;
-            updateStatus("AI Analyzing Scene...", "bg-blue-500");
+            updateStatus("AI Analyzing...", "bg-blue-500");
 
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             canvas.getContext('2d').drawImage(video, 0, 0);
             const base64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
 
-            const results = await analyzeScene(base64);
-            detectedItemsBatch = results;
-
-            if (results.length > 0) {
-                showSelectionModal(results);
+            currentScanResults = await analyzeImage(base64);
+            
+            if (currentScanResults.length > 0) {
+                renderSelection(currentScanResults);
+                selectionArea.classList.remove('hidden');
+                updateStatus("Scan Complete", "bg-emerald-500");
             } else {
-                updateStatus("No Items Found", "bg-red-500");
-                setTimeout(() => updateStatus("Ready to Scan", "bg-emerald-500"), 2000);
+                updateStatus("No Items Found", "bg-yellow-500");
+                setTimeout(() => updateStatus("System Ready", "bg-emerald-500"), 2000);
             }
-
+            
             document.getElementById('scanning-overlay').style.display = 'none';
             captureBtn.disabled = false;
         });
 
-        function showSelectionModal(items) {
-            detectionResults.innerHTML = items.map((item, idx) => `
-                <label class="flex items-center justify-between p-4 glass-morphism rounded-2xl cursor-pointer active:scale-[0.98] transition-all">
-                    <div class="flex items-center gap-4">
-                        <div class="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
-                        </div>
-                        <div>
-                            <p class="font-bold text-white text-sm">${item.name}</p>
-                            <p class="text-[10px] text-slate-500 uppercase font-bold">Match: ${Math.round(item.confidence * 100)}%</p>
+        function renderSelection(items) {
+            detectionResults.innerHTML = items.map((item, i) => `
+                <label class="flex items-center gap-4 p-4 bg-white/5 border border-white/5 rounded-2xl cursor-pointer active:bg-blue-500/10 transition-colors">
+                    <div class="relative">
+                        <input type="checkbox" checked data-idx="${i}" class="peer hidden">
+                        <div class="w-6 h-6 border-2 border-slate-700 rounded-lg peer-checked:bg-blue-600 peer-checked:border-blue-600 flex items-center justify-center transition-all">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="4"><path d="M20 6L9 17l-5-5"/></svg>
                         </div>
                     </div>
-                    <input type="checkbox" checked data-idx="${idx}" class="w-6 h-6 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-0">
+                    <span class="text-sm font-bold text-slate-200">${item.name}</span>
                 </label>
             `).join('');
-
-            selectionModal.classList.remove('hidden');
-            setTimeout(() => selectionModal.classList.remove('translate-y-full'), 10);
         }
 
         document.getElementById('confirm-selection').addEventListener('click', () => {
-            const checkboxes = detectionResults.querySelectorAll('input[type="checkbox"]');
-            checkboxes.forEach(cb => {
-                if (cb.checked) {
-                    const item = detectedItemsBatch[cb.dataset.idx];
+            const checks = detectionResults.querySelectorAll('input[type="checkbox"]');
+            let addedCount = 0;
+            checks.forEach(c => {
+                if (c.checked) {
+                    const item = currentScanResults[c.dataset.idx];
                     inventory[item.name] = (inventory[item.name] || 0) + 1;
-                    auditLog.unshift({ name: item.name, time: new Date().toLocaleTimeString() });
+                    addedCount++;
                 }
             });
-            
-            renderInventory();
-            closeModal();
-            updateStatus("Audit Updated", "bg-emerald-500");
+            if (addedCount > 0) renderInventory();
+            selectionArea.classList.add('hidden');
         });
 
-        document.getElementById('cancel-selection').addEventListener('click', closeModal);
-
-        function closeModal() {
-            selectionModal.classList.add('translate-y-full');
-            setTimeout(() => selectionModal.classList.add('hidden'), 300);
-        }
+        document.getElementById('cancel-selection').addEventListener('click', () => {
+            selectionArea.classList.add('hidden');
+            updateStatus("Scan Discarded", "bg-slate-500");
+            setTimeout(() => updateStatus("System Ready", "bg-emerald-500"), 2000);
+        });
 
         function renderInventory() {
             const keys = Object.keys(inventory);
-            if (keys.length === 0) {
-                inventoryList.innerHTML = '<div class="text-center py-10 opacity-30 text-sm italic">Inventory is currently empty...</div>';
-                document.getElementById('total-units').innerText = "0";
-                return;
-            }
-
             let total = 0;
-            inventoryList.innerHTML = keys.map(name => {
-                total += inventory[name];
-                return `
-                    <div class="glass-morphism p-4 rounded-2xl flex justify-between items-center animate-in slide-in-from-bottom-2">
-                        <div class="flex-1 overflow-hidden">
-                            <h3 class="font-bold text-sm text-white truncate">${name}</h3>
-                            <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Verified Stock</p>
+            if (keys.length === 0) {
+                inventoryList.innerHTML = `<div class="text-center py-12 glass rounded-3xl border-dashed border-white/10"><p class="text-slate-600 text-[10px] font-black uppercase tracking-widest">No stock scanned yet</p></div>`;
+            } else {
+                inventoryList.innerHTML = keys.map(k => {
+                    total += inventory[k];
+                    return `
+                        <div class="flex items-center justify-between p-4 glass rounded-2xl border border-white/5 item-row">
+                            <span class="text-sm font-black truncate pr-4 text-white">${k}</span>
+                            <div class="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/5">
+                                <button onclick="updateQty('${k.replace(/'/g, "\\'")}', -1)" class="w-10 h-10 flex items-center justify-center text-slate-500 font-bold hover:text-white">-</button>
+                                <span class="w-8 text-center text-blue-400 font-black text-lg">${inventory[k]}</span>
+                                <button onclick="updateQty('${k.replace(/'/g, "\\'")}', 1)" class="w-10 h-10 flex items-center justify-center text-slate-500 font-bold hover:text-white">+</button>
+                            </div>
                         </div>
-                        <div class="flex items-center bg-black/40 rounded-xl p-1 gap-1 ml-4 border border-white/5">
-                            <button onclick="changeQty('${name.replace(/'/g, "\\'")}', -1)" class="w-8 h-8 flex items-center justify-center text-slate-400">-</button>
-                            <span class="font-black text-sm min-w-[32px] text-center text-blue-400">${inventory[name]}</span>
-                            <button onclick="changeQty('${name.replace(/'/g, "\\'")}', 1)" class="w-8 h-8 flex items-center justify-center text-slate-400">+</button>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-            document.getElementById('total-units').innerText = total;
+                    `;
+                }).join('');
+            }
+            totalUnitsEl.innerText = total;
         }
 
-        window.changeQty = (name, delta) => {
-            inventory[name] += delta;
-            if (inventory[name] <= 0) delete inventory[name];
+        window.updateQty = (n, d) => {
+            inventory[n] += d;
+            if (inventory[n] <= 0) delete inventory[n];
             renderInventory();
         };
 
@@ -330,10 +257,17 @@ If no beverages are found, return {"items": []}. Only identify beverages.`;
         });
 
         document.getElementById('clear-list').addEventListener('click', () => {
-            if(confirm("Clear current batch?")) {
-                inventory = {};
-                renderInventory();
-            }
+            if (confirm("Reset current audit?")) { inventory = {}; renderInventory(); }
+        });
+
+        document.getElementById('export-btn').addEventListener('click', () => {
+            const data = Object.entries(inventory).map(([k, v]) => `${k},${v}`).join('\n');
+            const blob = new Blob(["Product,Quantity\n" + data], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('href', url);
+            a.setAttribute('download', `audit-${Date.now()}.csv`);
+            a.click();
         });
 
         window.addEventListener('load', initCamera);
