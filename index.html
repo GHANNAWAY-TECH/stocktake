@@ -3,16 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Club Stock Counter Pro - Gemini AI</title>
+    <title>Stocktake Pro - Multi-Scan</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         :root {
             --brand-blue: #3b82f6;
-            --brand-accent: #8b5cf6;
         }
         .glass-morphism {
-            background: rgba(15, 23, 42, 0.6);
-            backdrop-filter: blur(12px);
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(16px);
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
         #video-container {
@@ -29,13 +28,13 @@
             height: 4px;
             background: linear-gradient(to bottom, transparent, var(--brand-blue));
             box-shadow: 0 0 20px var(--brand-blue);
-            animation: scan 2.5s ease-in-out infinite;
+            animation: scan 2s ease-in-out infinite;
             display: none;
             z-index: 10;
         }
         @keyframes scan {
-            0%, 100% { top: 5%; opacity: 0.3; }
-            50% { top: 90%; opacity: 1; }
+            0%, 100% { top: 5%; opacity: 0.2; }
+            50% { top: 95%; opacity: 1; }
         }
         .shutter-flash {
             position: absolute;
@@ -52,319 +51,278 @@
             0% { opacity: 0.8; }
             100% { opacity: 0; }
         }
-        ::-webkit-scrollbar {
-            width: 4px;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: rgba(255,255,255,0.1);
-            border-radius: 10px;
+        .selection-modal {
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
     </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen font-sans selection:bg-blue-500/30">
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
     <div class="max-w-md mx-auto p-4 pb-32">
         <!-- Header -->
-        <header class="flex justify-between items-start mb-6 pt-4">
+        <header class="flex justify-between items-center mb-6 pt-4">
             <div>
-                <h1 class="text-2xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-violet-400">
-                    STOCKTAKE PRO
+                <h1 class="text-2xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">
+                    MULTI-SCAN
                 </h1>
                 <div class="flex items-center gap-2 mt-1">
                     <span id="status-dot" class="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span>
-                    <span id="status-text" class="text-[10px] font-bold uppercase tracking-widest text-slate-500">Initializing System</span>
+                    <span id="status-text" class="text-[10px] font-bold uppercase tracking-widest text-slate-500">Connecting Camera</span>
                 </div>
             </div>
-            <button id="history-toggle" class="p-2 glass-morphism rounded-lg text-slate-400 hover:text-white transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+            <button id="history-toggle" class="p-2 glass-morphism rounded-lg text-slate-400">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
             </button>
         </header>
 
         <!-- Camera Section -->
-        <div id="video-container" class="aspect-[4/5] bg-slate-900 mb-6 relative group ring-1 ring-white/10">
+        <div id="video-container" class="aspect-square bg-slate-900 mb-6 relative ring-1 ring-white/10">
             <video id="video" autoplay playsinline class="w-full h-full object-cover"></video>
             <canvas id="canvas" class="hidden"></canvas>
             <div id="shutter-effect" class="shutter-flash"></div>
             <div id="scanning-overlay" class="scanning-line"></div>
             
-            <!-- Guidance Overlay -->
-            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <div class="relative w-72 h-72 border-2 border-white/20 rounded-3xl overflow-hidden">
-                    <div class="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-blue-500 rounded-tl-lg"></div>
-                    <div class="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-blue-500 rounded-tr-lg"></div>
-                    <div class="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-blue-500 rounded-bl-lg"></div>
-                    <div class="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-blue-500 rounded-br-lg"></div>
-                </div>
-                <p class="mt-4 text-[10px] font-medium text-white/40 uppercase tracking-[0.3em] drop-shadow-md">Center bottle in frame</p>
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div class="w-4/5 h-4/5 border-2 border-dashed border-white/20 rounded-3xl"></div>
             </div>
-        </div>
+        </header>
 
         <!-- Controls -->
         <div class="grid grid-cols-4 gap-3 mb-8">
-            <button id="capture-btn" class="col-span-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-[0.98] transition-all py-4 rounded-2xl font-bold flex items-center justify-center gap-3 shadow-lg shadow-blue-900/20">
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
-                Identify & Count
+            <button id="capture-btn" class="col-span-3 bg-blue-600 hover:bg-blue-500 active:scale-[0.98] transition-all py-4 rounded-2xl font-bold flex items-center justify-center gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                Scan All Visible
             </button>
-            <button id="switch-camera" class="glass-morphism rounded-2xl flex items-center justify-center text-slate-300 hover:bg-white/10 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+            <button id="switch-camera" class="glass-morphism rounded-2xl flex items-center justify-center text-slate-300">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
             </button>
         </div>
 
-        <!-- Inventory Summary -->
-        <div class="space-y-6">
-            <div class="flex justify-between items-end">
-                <div>
-                    <h2 class="text-lg font-bold">Current Stock</h2>
-                    <p class="text-xs text-slate-500" id="item-count-label">0 Unique products identified</p>
-                </div>
-                <button id="clear-list" class="text-[10px] font-bold uppercase tracking-wider text-slate-600 hover:text-red-400 transition-colors">Clear Batch</button>
+        <!-- Inventory List -->
+        <div class="space-y-4">
+            <div class="flex justify-between items-center">
+                <h2 class="text-lg font-bold">Audited Inventory</h2>
+                <button id="clear-list" class="text-[10px] font-bold text-slate-600">Clear</button>
             </div>
+            <div id="inventory-list" class="space-y-2">
+                <div class="text-center py-10 opacity-30 text-sm italic">Inventory is currently empty...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Multi-Selection Modal -->
+    <div id="selection-modal" class="fixed inset-0 z-[100] bg-black/90 flex flex-col hidden selection-modal translate-y-full">
+        <div class="p-6 pt-12 flex-1 overflow-y-auto">
+            <h2 class="text-2xl font-black mb-2">Items Detected</h2>
+            <p class="text-slate-400 text-sm mb-6">Select the items you want to add to the count.</p>
             
-            <div id="inventory-list" class="space-y-3">
-                <div id="empty-state" class="text-center py-16 glass-morphism rounded-3xl border-dashed border-slate-800">
-                    <div class="mb-3 opacity-20 flex justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
-                    </div>
-                    <p class="text-sm text-slate-500 font-medium px-8">Ready for audit. Point at a beverage and capture to begin.</p>
-                </div>
+            <div id="detection-results" class="space-y-3">
+                <!-- AI results populated here -->
             </div>
         </div>
-    </div>
-
-    <!-- Log Panel (Hidden by Default) -->
-    <div id="history-panel" class="fixed inset-0 z-[60] bg-slate-950/95 translate-x-full transition-transform duration-300 p-6 overflow-y-auto hidden">
-        <div class="flex justify-between items-center mb-8">
-            <h2 class="text-xl font-bold">Audit History</h2>
-            <button id="history-close" class="p-2 glass-morphism rounded-full">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-        </div>
-        <div id="history-content" class="space-y-4">
-            <!-- Log entries here -->
+        <div class="p-6 glass-morphism border-t border-white/10 flex gap-3">
+            <button id="cancel-selection" class="flex-1 py-4 rounded-2xl font-bold bg-slate-800 text-slate-300">Cancel</button>
+            <button id="confirm-selection" class="flex-[2] py-4 rounded-2xl font-bold bg-emerald-600 text-white">Add Selected Items</button>
         </div>
     </div>
 
-    <!-- Bottom Action Bar -->
-    <div class="fixed bottom-0 left-0 right-0 p-6 glass-morphism border-t border-white/5 z-50">
-        <div class="max-w-md mx-auto flex justify-between items-center gap-6">
-            <div class="flex-1">
-                <p class="text-[10px] uppercase font-bold tracking-widest text-slate-500 mb-1">Batch Total</p>
+    <!-- History Panel -->
+    <div id="history-panel" class="fixed inset-0 z-[80] bg-slate-950 p-6 hidden translate-x-full transition-transform">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold">Audit Logs</h2>
+            <button id="history-close" class="p-2">✕</button>
+        </div>
+        <div id="history-content" class="space-y-3"></div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="fixed bottom-0 left-0 right-0 p-6 glass-morphism border-t border-white/5 z-[70]">
+        <div class="max-w-md mx-auto flex justify-between items-center">
+            <div>
+                <p class="text-[10px] uppercase font-bold text-slate-500">Current Total</p>
                 <div class="flex items-baseline gap-1">
-                    <span id="total-units" class="text-3xl font-black text-white leading-none">0</span>
-                    <span class="text-xs font-bold text-slate-500">units</span>
+                    <span id="total-units" class="text-3xl font-black">0</span>
+                    <span class="text-xs text-slate-500 font-bold uppercase">Units</span>
                 </div>
             </div>
-            <button id="export-btn" class="bg-emerald-600 hover:bg-emerald-500 active:scale-95 transition-all px-8 py-3 rounded-xl font-bold text-sm shadow-lg shadow-emerald-900/20">
-                Finish Audit
-            </button>
+            <button id="export-btn" class="bg-emerald-600 px-6 py-3 rounded-xl font-bold text-sm">Finish & Export</button>
         </div>
     </div>
 
     <script>
-        const apiKey = "AIzaSyBmQxyufxK_d_hTNbNHDDqKHzGRvapfGH8"; 
+        const apiKey = ""; // Set by environment
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const captureBtn = document.getElementById('capture-btn');
         const inventoryList = document.getElementById('inventory-list');
-        const totalUnitsEl = document.getElementById('total-units');
-        const scanningOverlay = document.getElementById('scanning-overlay');
-        const statusText = document.getElementById('status-text');
-        const statusDot = document.getElementById('status-dot');
-        const shutter = document.getElementById('shutter-effect');
-
+        const selectionModal = document.getElementById('selection-modal');
+        const detectionResults = document.getElementById('detection-results');
+        
         let inventory = {};
         let auditLog = [];
         let currentStream = null;
         let useFrontCamera = false;
+        let detectedItemsBatch = [];
 
         async function initCamera() {
-            updateStatus("Configuring Sensor...", "bg-yellow-500");
+            updateStatus("Adjusting Sensor", "bg-yellow-500");
+            if (currentStream) currentStream.getTracks().forEach(t => t.stop());
             
-            if (currentStream) {
-                currentStream.getTracks().forEach(track => track.stop());
-            }
-
-            const constraints = {
-                video: {
-                    facingMode: useFrontCamera ? 'user' : 'environment',
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                }
-            };
-
             try {
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: useFrontCamera ? 'user' : 'environment' }
+                });
                 currentStream = stream;
                 video.srcObject = stream;
-                
                 video.onloadedmetadata = () => {
                     video.play();
-                    updateStatus("System Online", "bg-emerald-500");
+                    updateStatus("Ready to Scan", "bg-emerald-500");
                 };
             } catch (err) {
-                console.error("Camera Error:", err);
-                updateStatus("Sensor Offline", "bg-red-500");
+                updateStatus("Camera Error", "bg-red-500");
             }
         }
 
-        function updateStatus(text, colorClass) {
-            statusText.innerText = text;
-            statusDot.className = `w-2 h-2 rounded-full animate-pulse ${colorClass}`;
+        function updateStatus(text, color) {
+            document.getElementById('status-text').innerText = text;
+            document.getElementById('status-dot').className = `w-2 h-2 rounded-full ${color}`;
         }
 
-        async function identifyItem(base64Image) {
-            const systemPrompt = `You are a high-speed beverage auditor.
-Identify the bottle/can. 
-Rules:
-1. Return ONLY the product name and size (e.g. "Corona 330ml").
-2. Be precise about brands.
-3. If unsure, guess based on shape/labels.
-4. If no beverage is found, return "Unknown Object".`;
-            
+        async function analyzeScene(base64Image) {
+            const systemPrompt = `You are an inventory vision assistant. 
+Examine the image and identify EVERY beverage container (bottle, can, box).
+Return a JSON object with an array called "items" where each object has "name" and "confidence" (0-1).
+Example: {"items": [{"name": "Corona 330ml", "confidence": 0.98}, {"name": "Jack Daniels 70cl", "confidence": 0.95}]}
+If no beverages are found, return {"items": []}. Only identify beverages.`;
+
             try {
-                const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: [{
                             parts: [
-                                { text: "Scan this item for inventory." },
+                                { text: "What drinks are visible in this photo?" },
                                 { inlineData: { mimeType: "image/jpeg", data: base64Image } }
                             ]
                         }],
-                        systemInstruction: { parts: [{ text: systemPrompt }] }
+                        systemInstruction: { parts: [{ text: systemPrompt }] },
+                        generationConfig: { responseMimeType: "application/json" }
                     })
                 });
 
                 const data = await response.json();
-                const result = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "Unidentified Item";
-                return result.replace(/[*_#]/g, ''); // Clean markdown if AI adds it
+                const jsonText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                return JSON.parse(jsonText).items || [];
             } catch (err) {
-                return "ERR_CONN";
-            }
-        }
-
-        async function fetchWithRetry(url, options, retries = 5) {
-            for (let i = 0; i < retries; i++) {
-                try {
-                    const res = await fetch(url, options);
-                    if (res.ok) return res;
-                    if (res.status === 429) await new Promise(r => setTimeout(r, 2000 * (i + 1)));
-                } catch (e) {
-                    if (i === retries - 1) throw e;
-                }
-                await new Promise(r => setTimeout(r, 1000));
+                console.error(err);
+                return [];
             }
         }
 
         captureBtn.addEventListener('click', async () => {
-            if (!currentStream || captureBtn.disabled) return;
-
-            // Visual Feedback
-            shutter.classList.add('flash-active');
-            setTimeout(() => shutter.classList.remove('flash-active'), 300);
+            if (captureBtn.disabled) return;
             
-            scanningOverlay.style.display = 'block';
+            document.getElementById('shutter-effect').classList.add('flash-active');
+            setTimeout(() => document.getElementById('shutter-effect').classList.remove('flash-active'), 300);
+            
+            document.getElementById('scanning-overlay').style.display = 'block';
             captureBtn.disabled = true;
-            updateStatus("Processing AI...", "bg-blue-500");
+            updateStatus("AI Analyzing Scene...", "bg-blue-500");
 
-            // Capture Frame with specific sizing for Gemini
-            canvas.width = 720;
-            canvas.height = 900;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const base64 = canvas.toDataURL('image/jpeg', 0.7).split(',')[1];
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const base64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
 
-            const itemName = await identifyItem(base64);
-            
-            if (itemName !== "ERR_CONN" && itemName !== "Unknown Object") {
-                addToInventory(itemName);
-                auditLog.unshift({ name: itemName, time: new Date().toLocaleTimeString() });
-                updateStatus("System Online", "bg-emerald-500");
+            const results = await analyzeScene(base64);
+            detectedItemsBatch = results;
+
+            if (results.length > 0) {
+                showSelectionModal(results);
             } else {
-                updateStatus("Scan Failed", "bg-red-500");
-                setTimeout(() => updateStatus("System Online", "bg-emerald-500"), 2000);
+                updateStatus("No Items Found", "bg-red-500");
+                setTimeout(() => updateStatus("Ready to Scan", "bg-emerald-500"), 2000);
             }
 
-            scanningOverlay.style.display = 'none';
+            document.getElementById('scanning-overlay').style.display = 'none';
             captureBtn.disabled = false;
         });
 
-        function addToInventory(name) {
-            inventory[name] = (inventory[name] || 0) + 1;
-            renderInventory();
+        function showSelectionModal(items) {
+            detectionResults.innerHTML = items.map((item, idx) => `
+                <label class="flex items-center justify-between p-4 glass-morphism rounded-2xl cursor-pointer active:scale-[0.98] transition-all">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+                        </div>
+                        <div>
+                            <p class="font-bold text-white text-sm">${item.name}</p>
+                            <p class="text-[10px] text-slate-500 uppercase font-bold">Match: ${Math.round(item.confidence * 100)}%</p>
+                        </div>
+                    </div>
+                    <input type="checkbox" checked data-idx="${idx}" class="w-6 h-6 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-0">
+                </label>
+            `).join('');
+
+            selectionModal.classList.remove('hidden');
+            setTimeout(() => selectionModal.classList.remove('translate-y-full'), 10);
         }
 
-        function updateQuantity(name, delta) {
-            inventory[name] += delta;
-            if (inventory[name] <= 0) delete inventory[name];
+        document.getElementById('confirm-selection').addEventListener('click', () => {
+            const checkboxes = detectionResults.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                if (cb.checked) {
+                    const item = detectedItemsBatch[cb.dataset.idx];
+                    inventory[item.name] = (inventory[item.name] || 0) + 1;
+                    auditLog.unshift({ name: item.name, time: new Date().toLocaleTimeString() });
+                }
+            });
+            
             renderInventory();
+            closeModal();
+            updateStatus("Audit Updated", "bg-emerald-500");
+        });
+
+        document.getElementById('cancel-selection').addEventListener('click', closeModal);
+
+        function closeModal() {
+            selectionModal.classList.add('translate-y-full');
+            setTimeout(() => selectionModal.classList.add('hidden'), 300);
         }
 
         function renderInventory() {
             const keys = Object.keys(inventory);
-            document.getElementById('item-count-label').innerText = `${keys.length} Unique products identified`;
-            
             if (keys.length === 0) {
-                inventoryList.innerHTML = `<div id="empty-state" class="text-center py-16 glass-morphism rounded-3xl border-dashed border-slate-800"><p class="text-sm text-slate-500">Ready for audit.</p></div>`;
-                totalUnitsEl.innerText = "0";
+                inventoryList.innerHTML = '<div class="text-center py-10 opacity-30 text-sm italic">Inventory is currently empty...</div>';
+                document.getElementById('total-units').innerText = "0";
                 return;
             }
 
-            let html = '';
             let total = 0;
-            keys.forEach(name => {
+            inventoryList.innerHTML = keys.map(name => {
                 total += inventory[name];
-                html += `
-                    <div class="glass-morphism p-4 rounded-2xl flex justify-between items-center group animate-in zoom-in-95 duration-200">
+                return `
+                    <div class="glass-morphism p-4 rounded-2xl flex justify-between items-center animate-in slide-in-from-bottom-2">
                         <div class="flex-1 overflow-hidden">
                             <h3 class="font-bold text-sm text-white truncate">${name}</h3>
-                            <div class="flex items-center gap-2 mt-1">
-                                <div class="h-1 w-16 bg-slate-800 rounded-full overflow-hidden">
-                                    <div class="h-full bg-blue-500" style="width: ${Math.min(inventory[name] * 10, 100)}%"></div>
-                                </div>
-                                <span class="text-[9px] text-slate-500 uppercase font-black">Stock Level</span>
-                            </div>
+                            <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Verified Stock</p>
                         </div>
-                        <div class="flex items-center bg-black/40 rounded-xl p-1 gap-1 ml-4 ring-1 ring-white/5">
-                            <button onclick="updateQuantity('${name.replace(/'/g, "\\'")}', -1)" class="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center text-slate-400">-</button>
-                            <span class="font-black text-sm min-w-[24px] text-center text-blue-400">${inventory[name]}</span>
-                            <button onclick="updateQuantity('${name.replace(/'/g, "\\'")}', 1)" class="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center text-slate-400">+</button>
+                        <div class="flex items-center bg-black/40 rounded-xl p-1 gap-1 ml-4 border border-white/5">
+                            <button onclick="changeQty('${name.replace(/'/g, "\\'")}', -1)" class="w-8 h-8 flex items-center justify-center text-slate-400">-</button>
+                            <span class="font-black text-sm min-w-[32px] text-center text-blue-400">${inventory[name]}</span>
+                            <button onclick="changeQty('${name.replace(/'/g, "\\'")}', 1)" class="w-8 h-8 flex items-center justify-center text-slate-400">+</button>
                         </div>
                     </div>
                 `;
-            });
-            inventoryList.innerHTML = html;
-            totalUnitsEl.innerText = total;
+            }).join('');
+            document.getElementById('total-units').innerText = total;
         }
 
-        // Panel Handling
-        const hPanel = document.getElementById('history-panel');
-        document.getElementById('history-toggle').addEventListener('click', () => {
-            hPanel.classList.remove('hidden');
-            setTimeout(() => hPanel.classList.remove('translate-x-full'), 10);
-            renderHistory();
-        });
-        document.getElementById('history-close').addEventListener('click', () => {
-            hPanel.classList.add('translate-x-full');
-            setTimeout(() => hPanel.classList.add('hidden'), 300);
-        });
-
-        function renderHistory() {
-            const content = document.getElementById('history-content');
-            if (auditLog.length === 0) {
-                content.innerHTML = '<p class="text-slate-500 text-center py-10">No recent scans</p>';
-                return;
-            }
-            content.innerHTML = auditLog.map(log => `
-                <div class="p-3 border-l-2 border-blue-500 bg-white/5 rounded-r-lg flex justify-between items-center">
-                    <div>
-                        <p class="text-sm font-bold">${log.name}</p>
-                        <p class="text-[10px] text-slate-500 uppercase">${log.time}</p>
-                    </div>
-                    <span class="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-1 rounded font-bold">SCAN SUCCESS</span>
-                </div>
-            `).join('');
-        }
+        window.changeQty = (name, delta) => {
+            inventory[name] += delta;
+            if (inventory[name] <= 0) delete inventory[name];
+            renderInventory();
+        };
 
         document.getElementById('switch-camera').addEventListener('click', () => {
             useFrontCamera = !useFrontCamera;
@@ -372,23 +330,10 @@ Rules:
         });
 
         document.getElementById('clear-list').addEventListener('click', () => {
-            if(confirm("Discard current batch?")) {
+            if(confirm("Clear current batch?")) {
                 inventory = {};
-                auditLog = [];
                 renderInventory();
             }
-        });
-
-        document.getElementById('export-btn').addEventListener('click', () => {
-            if (Object.keys(inventory).length === 0) return;
-            const text = "BAR AUDIT REPORT\nGenerated: " + new Date().toLocaleString() + "\n" + "=".repeat(20) + "\n" + 
-                         Object.entries(inventory).map(([k, v]) => `${v}x ${k}`).join('\n');
-            const blob = new Blob([text], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `audit-${Date.now()}.txt`;
-            a.click();
         });
 
         window.addEventListener('load', initCamera);
