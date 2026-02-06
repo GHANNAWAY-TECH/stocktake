@@ -138,8 +138,8 @@
         }
 
         async function analyzeImage(base64) {
-            const systemPrompt = `You are a Stock Auditor. Identify EVERY visible beverage (bottle/can). 
-            Be specific with brands (e.g., 'Heineken 330ml', 'Grey Goose 70cl'). 
+            const systemPrompt = `You are a Stock Auditor. Identify EVERY visible and countable items and especialy visible ones and also beverages if there (bottle/can). 
+            Be specific with known brands and known items name (e.g., 'Heineken 330ml', 'Grey Goose 70cl'). 
             Return ONLY a valid JSON: {"items": [{"name": "Product Name"}]}`;
             
             try {
