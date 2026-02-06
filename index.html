@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Stocktake Pro - Interactive Scanner</title>
+    <title>Stocktake Pro | GTS Advanced Auditor</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         :root { --brand-blue: #3b82f6; }
@@ -24,14 +24,17 @@
 
         .item-row { animation: slideUp 0.3s ease-out forwards; }
         @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
-    <div class="max-w-md mx-auto p-4 pb-40">
+    <div class="max-w-md mx-auto p-4 pb-44">
         <!-- Header -->
         <header class="flex justify-between items-center mb-6 pt-4">
             <div>
-                <h1 class="text-2xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">STOCKTAKE PRO</h1>
+                <h1 class="text-2xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400 uppercase">Stocktake Pro</h1>
                 <div class="flex items-center gap-2 mt-1">
                     <span id="status-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
                     <span id="status-text" class="text-[10px] font-bold uppercase tracking-widest text-slate-500">System Ready</span>
@@ -56,12 +59,12 @@
         </div>
 
         <!-- Trigger Button -->
-        <button id="capture-btn" class="w-full bg-blue-600 hover:bg-blue-500 active:scale-[0.98] transition-all py-5 rounded-2xl font-black flex items-center justify-center gap-3 mb-8 shadow-xl shadow-blue-900/30">
+        <button id="capture-btn" class="w-full bg-blue-600 hover:bg-blue-500 active:scale-[0.98] transition-all py-5 rounded-2xl font-black flex items-center justify-center gap-3 mb-8 shadow-xl shadow-blue-900/30 disabled:opacity-50 disabled:cursor-not-allowed">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-            SCAN VISIBLE ITEMS
+            <span id="btn-label">SCAN VISIBLE ITEMS</span>
         </button>
 
-        <!-- REVIEW LIST (Visible after scan) -->
+        <!-- REVIEW LIST -->
         <div id="selection-area" class="hidden space-y-4 mb-10 item-row">
             <div class="flex justify-between items-center px-1 border-b border-white/5 pb-2">
                 <h2 class="text-xs font-black uppercase tracking-[0.2em] text-blue-400">Review Results</h2>
@@ -83,7 +86,6 @@
                 <button id="clear-list" class="text-[10px] font-black uppercase text-red-500 hover:underline">Clear All</button>
             </div>
             <div id="inventory-list" class="space-y-3">
-                <!-- Confirmed items here -->
                 <div class="text-center py-12 glass rounded-3xl border-dashed border-white/10">
                     <p class="text-slate-600 text-[10px] font-black uppercase tracking-widest">No stock scanned yet</p>
                 </div>
@@ -97,7 +99,7 @@
             <div>
                 <p class="text-[10px] uppercase font-black tracking-widest text-slate-500 mb-1">Total Items</p>
                 <div class="flex items-baseline gap-1">
-                    <span id="total-units" class="text-4xl font-black leading-none">0</span>
+                    <span id="total-units" class="text-4xl font-black leading-none text-blue-400">0</span>
                     <span class="text-[10px] font-bold text-slate-600 uppercase">Qty</span>
                 </div>
             </div>
@@ -105,8 +107,17 @@
         </div>
     </div>
 
+    <!-- Error Modal -->
+    <div id="error-modal" class="fixed inset-0 bg-black/80 flex items-center justify-center p-6 z-[100] hidden">
+        <div class="bg-slate-900 border border-white/10 rounded-3xl p-8 max-w-sm w-full shadow-2xl">
+            <h3 class="text-red-400 font-black text-xl mb-2">SYSTEM ERROR</h3>
+            <p id="error-message" class="text-slate-400 text-sm mb-6 leading-relaxed"></p>
+            <button onclick="document.getElementById('error-modal').classList.add('hidden')" class="w-full py-3 bg-slate-800 rounded-xl font-bold text-sm uppercase tracking-widest">Dismiss</button>
+        </div>
+    </div>
+
     <script>
-        const apiKey = "AIzaSyBmQxyufxK_d_hTNbNHDDqKHzGRvapfGH8";
+        const apiKey = ""; // Provided by environment
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const captureBtn = document.getElementById('capture-btn');
@@ -123,11 +134,13 @@
             if (window.stream) window.stream.getTracks().forEach(track => track.stop());
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: useFrontCamera ? 'user' : 'environment' } 
+                    video: { facingMode: useFrontCamera ? 'user' : 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } 
                 });
                 window.stream = stream;
                 video.srcObject = stream;
+                updateStatus("System Ready", "bg-emerald-500");
             } catch (err) { 
+                showError("Camera Access Denied. Please enable camera permissions in your browser settings to perform audits.");
                 updateStatus("Camera Error", "bg-red-500");
             }
         }
@@ -137,67 +150,95 @@
             document.getElementById('status-dot').className = `w-2 h-2 rounded-full ${colorClass}`;
         }
 
-        async function analyzeImage(base64) {
-            const systemPrompt = `You are a Stock Auditor. Identify EVERY visible and countable items and especialy visible ones and also beverages if there (bottle/can). 
-            Be specific with known brands and known items name (e.g., 'Heineken 330ml', 'Grey Goose 70cl'). 
-            Return ONLY a valid JSON: {"items": [{"name": "Product Name"}]}`;
-            
-            try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: "What is visible?" }, { inlineData: { mimeType: "image/jpeg", data: base64 } }] }],
-                        systemInstruction: { parts: [{ text: systemPrompt }] },
-                        generationConfig: { responseMimeType: "application/json" }
-                    })
-                });
-                const data = await response.json();
-                return JSON.parse(data.candidates[0].content.parts[0].text).items || [];
-            } catch (e) { 
-                console.error("AI Error:", e);
-                return []; 
+        function showError(msg) {
+            document.getElementById('error-message').innerText = msg;
+            document.getElementById('error-modal').classList.remove('hidden');
+        }
+
+        async function analyzeImageWithRetry(base64, retries = 5) {
+            const systemPrompt = `You are a Stock Auditor at GTS. Identify EVERY visible and countable item in the image.
+            Focus on beverages (bottles/cans) and packaged goods.
+            Be extremely specific with brands and sizes (e.g., 'Heineken 330ml', 'Grey Goose 70cl').
+            Count distinct units.
+            Return ONLY a valid JSON: {"items": [{"name": "Product Name", "count": 1}]}`;
+
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: "Audit this shelf image." }, { inlineData: { mimeType: "image/jpeg", data: base64 } }] }],
+                            systemInstruction: { parts: [{ text: systemPrompt }] },
+                            generationConfig: { responseMimeType: "application/json" }
+                        })
+                    });
+
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    
+                    const data = await response.json();
+                    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                    return JSON.parse(text).items || [];
+                } catch (e) {
+                    if (i === retries - 1) throw e;
+                    const delay = Math.pow(2, i) * 1000;
+                    await new Promise(r => setTimeout(r, delay));
+                }
             }
         }
 
         captureBtn.addEventListener('click', async () => {
+            // UI Feedback
             document.getElementById('shutter-effect').classList.add('flash-active');
             setTimeout(() => document.getElementById('shutter-effect').classList.remove('flash-active'), 300);
             
             document.getElementById('scanning-overlay').style.display = 'block';
             captureBtn.disabled = true;
+            document.getElementById('btn-label').innerText = "AUDITING...";
             updateStatus("AI Analyzing...", "bg-blue-500");
 
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            canvas.getContext('2d').drawImage(video, 0, 0);
-            const base64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+            try {
+                // Capture Image
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+                const base64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
 
-            currentScanResults = await analyzeImage(base64);
-            
-            if (currentScanResults.length > 0) {
-                renderSelection(currentScanResults);
-                selectionArea.classList.remove('hidden');
-                updateStatus("Scan Complete", "bg-emerald-500");
-            } else {
-                updateStatus("No Items Found", "bg-yellow-500");
-                setTimeout(() => updateStatus("System Ready", "bg-emerald-500"), 2000);
+                // Process with AI
+                currentScanResults = await analyzeImageWithRetry(base64);
+                
+                if (currentScanResults.length > 0) {
+                    renderSelection(currentScanResults);
+                    selectionArea.classList.remove('hidden');
+                    updateStatus("Scan Complete", "bg-emerald-500");
+                    selectionArea.scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    updateStatus("No Items Found", "bg-yellow-500");
+                    setTimeout(() => updateStatus("System Ready", "bg-emerald-500"), 2000);
+                }
+            } catch (err) {
+                showError("The audit system is currently busy or unreachable. Please try again in a few seconds.");
+                updateStatus("Connection Error", "bg-red-500");
+            } finally {
+                document.getElementById('scanning-overlay').style.display = 'none';
+                captureBtn.disabled = false;
+                document.getElementById('btn-label').innerText = "SCAN VISIBLE ITEMS";
             }
-            
-            document.getElementById('scanning-overlay').style.display = 'none';
-            captureBtn.disabled = false;
         });
 
         function renderSelection(items) {
             detectionResults.innerHTML = items.map((item, i) => `
-                <label class="flex items-center gap-4 p-4 bg-white/5 border border-white/5 rounded-2xl cursor-pointer active:bg-blue-500/10 transition-colors">
-                    <div class="relative">
-                        <input type="checkbox" checked data-idx="${i}" class="peer hidden">
-                        <div class="w-6 h-6 border-2 border-slate-700 rounded-lg peer-checked:bg-blue-600 peer-checked:border-blue-600 flex items-center justify-center transition-all">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="4"><path d="M20 6L9 17l-5-5"/></svg>
+                <label class="flex items-center justify-between p-4 bg-white/5 border border-white/5 rounded-2xl cursor-pointer active:bg-blue-500/10 transition-colors">
+                    <div class="flex items-center gap-4">
+                        <div class="relative">
+                            <input type="checkbox" checked data-idx="${i}" class="peer hidden">
+                            <div class="w-6 h-6 border-2 border-slate-700 rounded-lg peer-checked:bg-blue-600 peer-checked:border-blue-600 flex items-center justify-center transition-all">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="4"><path d="M20 6L9 17l-5-5"/></svg>
+                            </div>
                         </div>
+                        <span class="text-sm font-bold text-slate-200">${item.name}</span>
                     </div>
-                    <span class="text-sm font-bold text-slate-200">${item.name}</span>
+                    <span class="text-blue-400 font-black text-xs">x${item.count || 1}</span>
                 </label>
             `).join('');
         }
@@ -208,7 +249,8 @@
             checks.forEach(c => {
                 if (c.checked) {
                     const item = currentScanResults[c.dataset.idx];
-                    inventory[item.name] = (inventory[item.name] || 0) + 1;
+                    const count = item.count || 1;
+                    inventory[item.name] = (inventory[item.name] || 0) + count;
                     addedCount++;
                 }
             });
@@ -226,7 +268,10 @@
             const keys = Object.keys(inventory);
             let total = 0;
             if (keys.length === 0) {
-                inventoryList.innerHTML = `<div class="text-center py-12 glass rounded-3xl border-dashed border-white/10"><p class="text-slate-600 text-[10px] font-black uppercase tracking-widest">No stock scanned yet</p></div>`;
+                inventoryList.innerHTML = `
+                    <div class="text-center py-12 glass rounded-3xl border-dashed border-white/10">
+                        <p class="text-slate-600 text-[10px] font-black uppercase tracking-widest">No stock scanned yet</p>
+                    </div>`;
             } else {
                 inventoryList.innerHTML = keys.map(k => {
                     total += inventory[k];
@@ -257,20 +302,27 @@
         });
 
         document.getElementById('clear-list').addEventListener('click', () => {
-            if (confirm("Reset current audit?")) { inventory = {}; renderInventory(); }
+            if (confirm("GTS Audit Protection: Reset all current counts?")) { 
+                inventory = {}; 
+                renderInventory(); 
+            }
         });
 
         document.getElementById('export-btn').addEventListener('click', () => {
-            const data = Object.entries(inventory).map(([k, v]) => `${k},${v}`).join('\n');
-            const blob = new Blob(["Product,Quantity\n" + data], { type: 'text/csv' });
+            if (Object.keys(inventory).length === 0) return showError("Audit list is empty. Scan items before exporting.");
+            
+            const data = Object.entries(inventory).map(([k, v]) => `"${k}",${v}`).join('\n');
+            const csvContent = "Product Name,Quantity\n" + data;
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.setAttribute('href', url);
-            a.setAttribute('download', `audit-${Date.now()}.csv`);
+            a.setAttribute('download', `GTS-Audit-${new Date().toISOString().slice(0,10)}.csv`);
             a.click();
         });
 
+        // Initialize on load
         window.addEventListener('load', initCamera);
     </script>
 </body>
-</html>
+    </html>
