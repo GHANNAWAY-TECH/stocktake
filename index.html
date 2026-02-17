@@ -21,8 +21,9 @@
   <div class="bg-white rounded-xl shadow p-4">
     <h2 class="font-semibold mb-2">📷 Camera Scan</h2>
 
-    <!-- Camera selector -->
+    <!-- Camera selection -->
     <select id="cameraSelect" class="border rounded w-full mb-2 p-1"></select>
+
     <video id="camera" autoplay class="rounded w-full border"></video>
     <button onclick="captureStock()" class="mt-3 w-full bg-indigo-600 text-white py-2 rounded hover:bg-indigo-700">
       Scan Stock
@@ -36,7 +37,7 @@
     <div id="chatBox" class="flex-1 overflow-y-auto border rounded p-2 text-sm space-y-2 bg-slate-50"></div>
     <div class="flex mt-2">
       <input id="chatInput" class="flex-1 border rounded-l px-2 py-1"
-        placeholder="Ask AI about the scanned stock..." />
+        placeholder="Ask AI anything about the stock..." />
       <button onclick="sendChat()" class="bg-indigo-600 text-white px-4 rounded-r">
         Send
       </button>
@@ -65,12 +66,14 @@
 
 <script>
 /* ================= CONFIG ================= */
-const API_KEY = "AIzaSyDQzUp2le5ynm0GA-Py4Kkfgjl7Lnw-E-Q"; // public key restricted to GitHub Pages
+const API_KEY = "AIzaSyDQzUp2le5ynm0GA-Py4Kkfgjl7Lnw-E-Q"; // Restricted to GitHub Pages URL
 let lastScanText = "";
 let currentStream = null;
 
 /* ================= CAMERA ================= */
-// populate camera list
+const camera = document.getElementById("camera");
+
+// Populate camera dropdown
 async function getCameras() {
   const devices = await navigator.mediaDevices.enumerateDevices();
   const videoDevices = devices.filter(d => d.kind === "videoinput");
@@ -85,138 +88,144 @@ async function getCameras() {
   if(videoDevices.length>0) startCamera(videoDevices[0].deviceId);
 }
 
-// start camera stream
+// Start camera stream
 async function startCamera(deviceId) {
-  if(currentStream) {
-    currentStream.getTracks().forEach(track => track.stop());
-  }
+  if(currentStream) currentStream.getTracks().forEach(track=>track.stop());
   currentStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId } });
   camera.srcObject = currentStream;
 }
 
-// switch camera
+// Switch camera
 document.getElementById("cameraSelect").addEventListener("change", e => {
   startCamera(e.target.value);
 });
 
-// initialize
-const camera = document.getElementById("camera");
 getCameras().catch(()=>alert("No camera found"));
 
-/* ================= SCAN ================= */
+/* ================= SCAN STOCK ================= */
 async function captureStock() {
   const canvas = document.getElementById("snapshot");
   canvas.width = camera.videoWidth;
   canvas.height = camera.videoHeight;
-  canvas.getContext("2d").drawImage(camera, 0, 0);
+  canvas.getContext("2d").drawImage(camera,0,0);
   const imageBase64 = canvas.toDataURL("image/jpeg").split(",")[1];
 
-  addChat("system", "📷 Scanning stock...");
+  addChat("system","📷 Scanning stock...");
 
   const payload = {
-    contents: [{
-      parts: [
+    contents:[{
+      parts:[
         { text: "List all visible products with quantities in JSON format." },
-        { inlineData: { mimeType: "image/jpeg", data: imageBase64 } }
+        { inlineData:{ mimeType:"image/jpeg", data:imageBase64 } }
       ]
     }]
   };
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models/gemini-pro-vision:generateContent?key=${API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    }
-  );
-  const data = await res.json();
-  lastScanText = JSON.stringify(data, null, 2);
-  renderStock(data);
-  saveHistory(data);
-  addChat("ai", "✅ Scan complete. Ask me to separate or analyze the stock.");
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-pro-vision:generateContent?key=${API_KEY}`,
+      {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify(payload)
+      }
+    );
+    const data = await res.json();
+    lastScanText = JSON.stringify(data,null,2);
+    renderStock(data);
+    saveHistory(data);
+    addChat("ai","✅ Scan complete. You can ask me anything now.");
+  } catch(err) {
+    console.error(err);
+    addChat("ai","⚠️ Error scanning stock.");
+  }
 }
 
-/* ================= RENDER ================= */
-function renderStock(data) {
+/* ================= RENDER STOCK ================= */
+function renderStock(data){
   const stockList = document.getElementById("stockList");
-  stockList.innerHTML = "";
+  stockList.innerHTML="";
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "No items detected";
-  text.split("\n").forEach(line => {
-    if(line.trim()) stockList.innerHTML += `<li>• ${line}</li>`;
+  text.split("\n").forEach(line=>{
+    if(line.trim()) stockList.innerHTML+=`<li>• ${line}</li>`;
   });
 }
 
 /* ================= CHAT ================= */
-async function sendChat() {
-  const input = document.getElementById("chatInput").value.trim();
+async function sendChat(){
+  const input=document.getElementById("chatInput").value.trim();
   if(!input) return;
-  addChat("user", input);
-  document.getElementById("chatInput").value = "";
+  addChat("user",input);
+  document.getElementById("chatInput").value="";
 
-  const payload = {
-    contents: [{
-      parts: [{
-        text: `Scanned stock data:\n${lastScanText}\n\nUser request: ${input}`
+  const payload={
+    contents:[{
+      parts:[{
+        text:`You are a smart assistant. 
+You have access to the scanned stock data:\n${lastScanText || "{}"}\n\nUser question: ${input}\nAnswer clearly and helpfully.`
       }]
     }]
   };
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    }
-  );
-
-  const data = await res.json();
-  const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "No response";
-  addChat("ai", reply);
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${API_KEY}`,
+      {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify(payload)
+      }
+    );
+    const data = await res.json();
+    const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "No response";
+    addChat("ai",reply);
+  } catch(err) {
+    console.error(err);
+    addChat("ai","⚠️ Error contacting AI.");
+  }
 }
 
 /* ================= CHAT UI ================= */
-function addChat(role, text) {
-  const chatBox = document.getElementById("chatBox");
-  const div = document.createElement("div");
-  div.className = role === "user" ? "text-right text-indigo-700"
-                  : role === "ai" ? "text-left text-green-700"
+function addChat(role,text){
+  const chatBox=document.getElementById("chatBox");
+  const div=document.createElement("div");
+  div.className = role==="user" ? "text-right text-indigo-700"
+                  : role==="ai" ? "text-left text-green-700"
                   : "text-center text-gray-500 text-xs";
-  div.innerText = text;
+  div.innerText=text;
   chatBox.appendChild(div);
-  chatBox.scrollTop = chatBox.scrollHeight;
+  chatBox.scrollTop=chatBox.scrollHeight;
 }
 
 /* ================= HISTORY ================= */
-function saveHistory(data) {
-  const history = JSON.parse(localStorage.getItem("stockHistory") || "[]");
-  history.unshift({ date: new Date().toLocaleString(), data });
-  localStorage.setItem("stockHistory", JSON.stringify(history));
+function saveHistory(data){
+  const history=JSON.parse(localStorage.getItem("stockHistory")||"[]");
+  history.unshift({ date:new Date().toLocaleString(), data });
+  localStorage.setItem("stockHistory",JSON.stringify(history));
   renderHistory();
 }
 
-function renderHistory() {
-  const history = JSON.parse(localStorage.getItem("stockHistory") || "[]");
-  const historyDiv = document.getElementById("history");
-  historyDiv.innerHTML = "";
-  history.slice(0,5).forEach(h => {
-    historyDiv.innerHTML += `<div class="border-b pb-1">📅 ${h.date}</div>`;
+function renderHistory(){
+  const history=JSON.parse(localStorage.getItem("stockHistory")||"[]");
+  const historyDiv=document.getElementById("history");
+  historyDiv.innerHTML="";
+  history.slice(0,5).forEach(h=>{
+    historyDiv.innerHTML+=`<div class="border-b pb-1">📅 ${h.date}</div>`;
   });
 }
 renderHistory();
 
-/* ================= EXPORT ================= */
-function exportCSV() {
-  let csv = "Scan Date,Data\n";
-  const history = JSON.parse(localStorage.getItem("stockHistory") || "[]");
-  history.forEach(h => {
-    csv += `"${h.date}","${JSON.stringify(h.data).replace(/"/g,'""')}"\n`;
+/* ================= EXPORT CSV ================= */
+function exportCSV(){
+  let csv="Scan Date,Data\n";
+  const history=JSON.parse(localStorage.getItem("stockHistory")||"[]");
+  history.forEach(h=>{
+    csv+=`"${h.date}","${JSON.stringify(h.data).replace(/"/g,'""')}"\n`;
   });
-  const blob = new Blob([csv], { type: "text/csv" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = "ai_stock_history.csv";
+  const blob=new Blob([csv],{ type:"text/csv" });
+  const link=document.createElement("a");
+  link.href=URL.createObjectURL(blob);
+  link.download="ai_stock_history.csv";
   link.click();
 }
 </script>
