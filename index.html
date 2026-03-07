@@ -1,234 +1,363 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>AI Camera Stock Taking</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GTS Stock Taker Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --secondary: #64748b;
+        }
+        body {
+            background-color: #f8fafc;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        .scanner-container {
+            position: relative;
+            overflow: hidden;
+            border-radius: 1rem;
+            background: #000;
+        }
+        .scan-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 70%;
+            height: 40%;
+            border: 2px solid #3b82f6;
+            box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.5);
+            pointer-events: none;
+            border-radius: 8px;
+            display: none; /* Hidden until camera starts */
+        }
+        .scan-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: #ef4444;
+            top: 0;
+            animation: scan 2s linear infinite;
+        }
+        @keyframes scan {
+            0% { top: 0; }
+            100% { top: 100%; }
+        }
+        #permission-prompt {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #1e293b;
+            color: white;
+            z-index: 20;
+            text-align: center;
+            padding: 20px;
+        }
+    </style>
 </head>
-<body class="bg-slate-100 text-slate-800">
+<body class="p-4 md:p-8">
+    <div class="max-w-4xl mx-auto">
+        <header class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-900">GTS Stock Taker</h1>
+                <p class="text-sm text-slate-500">Professional Inventory Management</p>
+            </div>
+            <div id="status-badge" class="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                System Ready
+            </div>
+        </header>
 
-<!-- HEADER -->
-<header class="bg-indigo-600 text-white p-4 shadow">
-  <h1 class="text-xl font-bold">📦 AI Camera Stock Taking System</h1>
-  <p class="text-sm opacity-90">Scan • Analyze • Chat • Export</p>
-</header>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Left Side: Scanner & Controls -->
+            <section class="space-y-6">
+                <div class="scanner-container aspect-video">
+                    <!-- Permission Overlay -->
+                    <div id="permission-prompt">
+                        <svg class="w-12 h-12 mb-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                        <h3 class="font-bold text-lg mb-2">Camera Access Required</h3>
+                        <p class="text-sm text-slate-400 mb-6">Tap start to scan barcodes and identify items.</p>
+                        <button onclick="requestCameraPermission()" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-full font-bold transition-transform active:scale-95 shadow-lg">
+                            Start Scanner
+                        </button>
+                    </div>
 
-<!-- MAIN GRID -->
-<div class="grid md:grid-cols-2 gap-4 p-4">
+                    <video id="video" class="w-full h-full object-cover" autoplay playsinline></video>
+                    <div id="scanner-visuals" class="scan-overlay">
+                        <div class="scan-line"></div>
+                    </div>
+                </div>
 
-  <!-- CAMERA SECTION -->
-  <div class="bg-white rounded-xl shadow p-4">
-    <h2 class="font-semibold mb-2">📷 Camera Scan</h2>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <h2 class="font-semibold mb-4 flex items-center gap-2">
+                        <svg class="w-5 h-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+                        Manual Entry / Quick Add
+                    </h2>
+                    <div class="space-y-4">
+                        <input type="text" id="item-name" placeholder="Item Name or Barcode" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                        <div class="flex gap-2">
+                            <input type="number" id="item-qty" value="1" class="w-24 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                            <button onclick="addToStock()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg transition-colors">
+                                Add to Inventory
+                            </button>
+                        </div>
+                        <button id="ai-btn" disabled onclick="analyzeWithAI()" class="w-full border border-slate-300 bg-slate-50 text-slate-400 font-medium py-2 rounded-lg transition-colors flex items-center justify-center gap-2 cursor-not-allowed">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>
+                            Identify with Gemini AI
+                        </button>
+                    </div>
+                </div>
+            </section>
 
-    <!-- Camera selection -->
-    <select id="cameraSelect" class="border rounded w-full mb-2 p-1"></select>
+            <!-- Right Side: Inventory List -->
+            <section class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="font-bold text-lg">Current Session</h2>
+                    <button onclick="exportData()" class="text-blue-600 text-sm font-medium hover:underline">Export CSV</button>
+                </div>
+                
+                <div id="inventory-list" class="space-y-3 max-h-[500px] overflow-y-auto pr-2">
+                    <div class="text-center py-10 text-slate-400 italic">
+                        No items scanned yet.
+                    </div>
+                </div>
 
-    <video id="camera" autoplay class="rounded w-full border"></video>
-    <button onclick="captureStock()" class="mt-3 w-full bg-indigo-600 text-white py-2 rounded hover:bg-indigo-700">
-      Scan Stock
-    </button>
-    <canvas id="snapshot" class="hidden"></canvas>
-  </div>
-
-  <!-- CHAT SECTION -->
-  <div class="bg-white rounded-xl shadow p-4 flex flex-col">
-    <h2 class="font-semibold mb-2">💬 AI Stock Assistant</h2>
-    <div id="chatBox" class="flex-1 overflow-y-auto border rounded p-2 text-sm space-y-2 bg-slate-50"></div>
-    <div class="flex mt-2">
-      <input id="chatInput" class="flex-1 border rounded-l px-2 py-1"
-        placeholder="Ask AI anything about the stock..." />
-      <button onclick="sendChat()" class="bg-indigo-600 text-white px-4 rounded-r">
-        Send
-      </button>
+                <div class="mt-6 pt-6 border-t border-slate-100">
+                    <div class="flex justify-between text-slate-600 font-medium">
+                        <span>Total Items:</span>
+                        <span id="total-count">0</span>
+                    </div>
+                </div>
+            </section>
+        </div>
     </div>
-  </div>
-</div>
 
-<!-- RESULTS -->
-<div class="p-4 grid md:grid-cols-2 gap-4">
+    <!-- UI Feedback Toast -->
+    <div id="toast" class="fixed bottom-4 right-4 bg-slate-800 text-white px-6 py-3 rounded-lg shadow-xl opacity-0 transition-opacity pointer-events-none">
+        Item added successfully
+    </div>
 
-  <!-- STOCK LIST -->
-  <div class="bg-white rounded-xl shadow p-4">
-    <h2 class="font-semibold mb-2">📊 Detected Stock</h2>
-    <ul id="stockList" class="space-y-1 text-sm"></ul>
-  </div>
+    <script>
+        const apiKey = ""; // Environment handles this
+        let inventory = [];
+        const video = document.getElementById('video');
+        const inventoryList = document.getElementById('inventory-list');
+        const totalCountDisplay = document.getElementById('total-count');
 
-  <!-- HISTORY -->
-  <div class="bg-white rounded-xl shadow p-4">
-    <h2 class="font-semibold mb-2">🗂 Scan History</h2>
-    <div id="history" class="text-sm space-y-2"></div>
-    <button onclick="exportCSV()" class="mt-3 w-full bg-green-600 text-white py-2 rounded">
-      Export CSV
-    </button>
-  </div>
-</div>
+        // 1. Explicit Permission Request (Required for Mobile UX)
+        async function requestCameraPermission() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    } 
+                });
+                
+                video.srcObject = stream;
+                
+                // Hide prompt, show scanner visuals
+                document.getElementById('permission-prompt').style.display = 'none';
+                document.getElementById('scanner-visuals').style.display = 'block';
+                
+                // Enable AI button once camera is live
+                const aiBtn = document.getElementById('ai-btn');
+                aiBtn.disabled = false;
+                aiBtn.className = "w-full border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium py-2 rounded-lg transition-colors flex items-center justify-center gap-2";
 
-<script>
-/* ================= CONFIG ================= */
-const API_KEY = "AIzaSyDQzUp2le5ynm0GA-Py4Kkfgjl7Lnw-E-Q"; // Restricted to GitHub Pages URL
-let lastScanText = "";
-let currentStream = null;
+                initScanner();
+                showToast("Camera active");
+            } catch (err) {
+                console.error("Error accessing camera: ", err);
+                showToast("Could not access camera. Please check browser settings.");
+            }
+        }
 
-/* ================= CAMERA ================= */
-const camera = document.getElementById("camera");
+        // 2. Barcode Scanning Logic
+        async function initScanner() {
+            if (!('BarcodeDetector' in window)) {
+                console.warn('Barcode Detector API not supported on this browser.');
+                return;
+            }
 
-// Populate camera dropdown
-async function getCameras() {
-  const devices = await navigator.mediaDevices.enumerateDevices();
-  const videoDevices = devices.filter(d => d.kind === "videoinput");
-  const cameraSelect = document.getElementById("cameraSelect");
-  cameraSelect.innerHTML = "";
-  videoDevices.forEach((d, i) => {
-    const opt = document.createElement("option");
-    opt.value = d.deviceId;
-    opt.innerText = d.label || `Camera ${i+1}`;
-    cameraSelect.appendChild(opt);
-  });
-  if(videoDevices.length>0) startCamera(videoDevices[0].deviceId);
-}
+            const detector = new BarcodeDetector({ formats: ['qr_code', 'ean_13', 'code_128', 'ean_8'] });
+            
+            async function scanFrame() {
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                    try {
+                        const barcodes = await detector.detect(video);
+                        if (barcodes.length > 0) {
+                            const code = barcodes[0].rawValue;
+                            handleScannedItem(code);
+                            // Simple debounce to prevent duplicate immediate scans
+                            await new Promise(r => setTimeout(r, 2000));
+                        }
+                    } catch (e) {
+                        // Detector sometimes fails on empty frames
+                    }
+                }
+                requestAnimationFrame(scanFrame);
+            }
+            scanFrame();
+        }
 
-// Start camera stream
-async function startCamera(deviceId) {
-  if(currentStream) currentStream.getTracks().forEach(track=>track.stop());
-  currentStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId } });
-  camera.srcObject = currentStream;
-}
+        // 3. Stock Management
+        function handleScannedItem(barcode) {
+            document.getElementById('item-name').value = barcode;
+            addToStock(barcode);
+        }
 
-// Switch camera
-document.getElementById("cameraSelect").addEventListener("change", e => {
-  startCamera(e.target.value);
-});
+        function addToStock(customName = null) {
+            const nameInput = document.getElementById('item-name');
+            const qtyInput = document.getElementById('item-qty');
+            const name = customName || nameInput.value;
+            const qty = parseInt(qtyInput.value);
 
-getCameras().catch(()=>alert("No camera found"));
+            if (!name) return;
 
-/* ================= SCAN STOCK ================= */
-async function captureStock() {
-  const canvas = document.getElementById("snapshot");
-  canvas.width = camera.videoWidth;
-  canvas.height = camera.videoHeight;
-  canvas.getContext("2d").drawImage(camera,0,0);
-  const imageBase64 = canvas.toDataURL("image/jpeg").split(",")[1];
+            const existing = inventory.find(i => i.name === name);
+            if (existing) {
+                existing.qty += qty;
+                existing.timestamp = new Date().toLocaleTimeString();
+            } else {
+                inventory.unshift({
+                    id: Date.now(),
+                    name: name,
+                    qty: qty,
+                    timestamp: new Date().toLocaleTimeString()
+                });
+            }
 
-  addChat("system","📷 Scanning stock...");
+            updateUI();
+            nameInput.value = "";
+            qtyInput.value = "1";
+            showToast(`Added ${qty} x ${name}`);
+        }
 
-  const payload = {
-    contents:[{
-      parts:[
-        { text: "List all visible products with quantities in JSON format." },
-        { inlineData:{ mimeType:"image/jpeg", data:imageBase64 } }
-      ]
-    }]
-  };
+        function removeFromStock(id) {
+            inventory = inventory.filter(i => i.id !== id);
+            updateUI();
+        }
 
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-pro-vision:generateContent?key=${API_KEY}`,
-      {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify(payload)
-      }
-    );
-    const data = await res.json();
-    lastScanText = JSON.stringify(data,null,2);
-    renderStock(data);
-    saveHistory(data);
-    addChat("ai","✅ Scan complete. You can ask me anything now.");
-  } catch(err) {
-    console.error(err);
-    addChat("ai","⚠️ Error scanning stock.");
-  }
-}
+        function updateUI() {
+            if (inventory.length === 0) {
+                inventoryList.innerHTML = `<div class="text-center py-10 text-slate-400 italic">No items scanned yet.</div>`;
+                totalCountDisplay.innerText = "0";
+                return;
+            }
 
-/* ================= RENDER STOCK ================= */
-function renderStock(data){
-  const stockList = document.getElementById("stockList");
-  stockList.innerHTML="";
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "No items detected";
-  text.split("\n").forEach(line=>{
-    if(line.trim()) stockList.innerHTML+=`<li>• ${line}</li>`;
-  });
-}
+            inventoryList.innerHTML = inventory.map(item => `
+                <div class="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-100 group">
+                    <div class="flex-1">
+                        <h4 class="font-semibold text-slate-800">${item.name}</h4>
+                        <p class="text-xs text-slate-500">Last updated: ${item.timestamp}</p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <span class="bg-blue-100 text-blue-700 px-3 py-1 rounded font-bold">×${item.qty}</span>
+                        <button onclick="removeFromStock(${item.id})" class="text-slate-300 hover:text-red-500 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
 
-/* ================= CHAT ================= */
-async function sendChat(){
-  const input=document.getElementById("chatInput").value.trim();
-  if(!input) return;
-  addChat("user",input);
-  document.getElementById("chatInput").value="";
+            totalCountDisplay.innerText = inventory.reduce((sum, item) => sum + item.qty, 0);
+        }
 
-  const payload={
-    contents:[{
-      parts:[{
-        text:`You are a smart assistant. 
-You have access to the scanned stock data:\n${lastScanText || "{}"}\n\nUser question: ${input}\nAnswer clearly and helpfully.`
-      }]
-    }]
-  };
+        // 4. Gemini AI Integration
+        async function analyzeWithAI() {
+            if (!video.srcObject) return;
+            
+            const statusBadge = document.getElementById('status-badge');
+            statusBadge.innerText = "AI Processing...";
+            statusBadge.className = "px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700";
 
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${API_KEY}`,
-      {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify(payload)
-      }
-    );
-    const data = await res.json();
-    const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "No response";
-    addChat("ai",reply);
-  } catch(err) {
-    console.error(err);
-    addChat("ai","⚠️ Error contacting AI.");
-  }
-}
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const base64Image = canvas.toDataURL('image/png').split(',')[1];
 
-/* ================= CHAT UI ================= */
-function addChat(role,text){
-  const chatBox=document.getElementById("chatBox");
-  const div=document.createElement("div");
-  div.className = role==="user" ? "text-right text-indigo-700"
-                  : role==="ai" ? "text-left text-green-700"
-                  : "text-center text-gray-500 text-xs";
-  div.innerText=text;
-  chatBox.appendChild(div);
-  chatBox.scrollTop=chatBox.scrollHeight;
-}
+            const prompt = "Identify the product in this image. Return ONLY the name of the product. If you can't see a clear product, say 'Unidentified Item'.";
+            
+            try {
+                const response = await fetchWithRetry(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{
+                                role: "user",
+                                parts: [
+                                    { text: prompt },
+                                    { inlineData: { mimeType: "image/png", data: base64Image } }
+                                ]
+                            }]
+                        })
+                    }
+                );
 
-/* ================= HISTORY ================= */
-function saveHistory(data){
-  const history=JSON.parse(localStorage.getItem("stockHistory")||"[]");
-  history.unshift({ date:new Date().toLocaleString(), data });
-  localStorage.setItem("stockHistory",JSON.stringify(history));
-  renderHistory();
-}
+                const data = await response.json();
+                const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+                
+                if (resultText && resultText !== "Unidentified Item") {
+                    document.getElementById('item-name').value = resultText;
+                    showToast(`AI Suggestion: ${resultText}`);
+                } else {
+                    showToast("AI couldn't identify the item clearly.");
+                }
 
-function renderHistory(){
-  const history=JSON.parse(localStorage.getItem("stockHistory")||"[]");
-  const historyDiv=document.getElementById("history");
-  historyDiv.innerHTML="";
-  history.slice(0,5).forEach(h=>{
-    historyDiv.innerHTML+=`<div class="border-b pb-1">📅 ${h.date}</div>`;
-  });
-}
-renderHistory();
+            } catch (err) {
+                console.error(err);
+                showToast("AI Analysis failed.");
+            } finally {
+                statusBadge.innerText = "System Ready";
+                statusBadge.className = "px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700";
+            }
+        }
 
-/* ================= EXPORT CSV ================= */
-function exportCSV(){
-  let csv="Scan Date,Data\n";
-  const history=JSON.parse(localStorage.getItem("stockHistory")||"[]");
-  history.forEach(h=>{
-    csv+=`"${h.date}","${JSON.stringify(h.data).replace(/"/g,'""')}"\n`;
-  });
-  const blob=new Blob([csv],{ type:"text/csv" });
-  const link=document.createElement("a");
-  link.href=URL.createObjectURL(blob);
-  link.download="ai_stock_history.csv";
-  link.click();
-}
-</script>
+        async function fetchWithRetry(url, options, retries = 5, backoff = 1000) {
+            try {
+                const response = await fetch(url, options);
+                if (!response.ok) throw new Error(response.statusText);
+                return response;
+            } catch (err) {
+                if (retries <= 0) throw err;
+                await new Promise(r => setTimeout(r, backoff));
+                return fetchWithRetry(url, options, retries - 1, backoff * 2);
+            }
+        }
 
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.innerText = msg;
+            toast.style.opacity = "1";
+            setTimeout(() => toast.style.opacity = "0", 3000);
+        }
+
+        function exportData() {
+            if (inventory.length === 0) return;
+            let csvContent = "data:text/csv;charset=utf-8,Name,Quantity,Time\n";
+            inventory.forEach(i => {
+                csvContent += `"${i.name}",${i.qty},${i.timestamp}\n`;
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `GTS_Stock_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
 </body>
 </html>
