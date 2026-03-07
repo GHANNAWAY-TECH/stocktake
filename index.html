@@ -27,14 +27,14 @@
             background: white;
             opacity: 0;
             pointer-events: none;
-            z-index: 30;
+            z-index: 50;
         }
         .flash-active {
-            animation: flashAnim 0.3s ease-out;
+            animation: flashAnim 0.4s ease-out;
         }
         @keyframes flashAnim {
             0% { opacity: 0; }
-            50% { opacity: 1; }
+            20% { opacity: 1; }
             100% { opacity: 0; }
         }
         #permission-prompt {
@@ -61,6 +61,15 @@
         }
         @keyframes spin {
             to { transform: rotate(360deg); }
+        }
+        #captured-preview {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 20;
+            display: none;
         }
     </style>
 </head>
@@ -95,11 +104,12 @@
                     </div>
 
                     <video id="video" class="w-full h-full object-cover" autoplay playsinline></video>
+                    <canvas id="captured-preview"></canvas>
                     <div id="shutter-flash" class="shutter-flash"></div>
                     
                     <!-- Overlay Guides -->
-                    <div class="absolute inset-0 border-[40px] border-black/20 pointer-events-none"></div>
-                    <div class="absolute top-4 left-4 text-white/50 text-[10px] font-mono uppercase tracking-widest">GTS_V_2.0_LIVE</div>
+                    <div class="absolute inset-0 border-[40px] border-black/20 pointer-events-none z-10"></div>
+                    <div class="absolute top-4 left-4 text-white/50 text-[10px] font-mono uppercase tracking-widest z-10">GTS_V_2.0_LIVE</div>
                 </div>
 
                 <!-- AI Instructions Input Area -->
@@ -179,9 +189,10 @@
     </div>
 
     <script>
-        const apiKey = "AIzaSyAV0uP4xwFJoKJdpJ6tVtA-f85j3_Qjel4";
+        const apiKey = ""; // API Key provided by environment
         let inventory = [];
         const video = document.getElementById('video');
+        const previewCanvas = document.getElementById('captured-preview');
         const inventoryList = document.getElementById('inventory-list');
         const totalCountDisplay = document.getElementById('total-count');
         const statusBadge = document.getElementById('status-badge');
@@ -212,10 +223,20 @@
         async function captureAndAnalyze() {
             if (statusBadge.innerText.includes("PROCESSING")) return;
 
-            // Visual Feedback
+            // 1. Immediately capture the frame onto the canvas
+            const ctx = previewCanvas.getContext('2d');
+            previewCanvas.width = video.videoWidth;
+            previewCanvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
+            
+            // 2. Display the frozen frame to the user so they know what was captured
+            previewCanvas.style.display = 'block';
+            
+            // 3. Trigger Shutter Effect
             document.getElementById('shutter-flash').classList.add('flash-active');
-            setTimeout(() => document.getElementById('shutter-flash').classList.remove('flash-active'), 300);
+            setTimeout(() => document.getElementById('shutter-flash').classList.remove('flash-active'), 400);
 
+            // 4. Set UI States
             statusBadge.innerText = "AI PROCESSING...";
             statusBadge.className = "px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-blue-600 text-white shadow-sm";
             
@@ -223,14 +244,10 @@
             const originalHtml = btn.innerHTML;
             btn.innerHTML = `<div class="loading-ring"></div> <span class="text-xl font-black italic">ANALYZING...</span>`;
 
-            // Capture Frame
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            canvas.getContext('2d').drawImage(video, 0, 0);
-            const base64Image = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+            // 5. Extract the base64 data from the canvas (the actual photo taken)
+            const base64Image = previewCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
 
-            // AI Logic - Using instructions from the textarea
+            // 6. AI Prompt
             const userInstructions = document.getElementById('ai-instructions').value;
             const prompt = `${userInstructions}
             Format your response strictly as a JSON list of objects: [{"name": "Item Name", "qty": 5}]. 
@@ -259,6 +276,8 @@
                 console.error(err);
                 showToast("ANALYSIS ERROR");
             } finally {
+                // Return to live view and reset buttons
+                previewCanvas.style.display = 'none';
                 statusBadge.innerText = "System Ready";
                 statusBadge.className = "px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-green-100 text-green-700 shadow-sm border border-green-200";
                 btn.innerHTML = originalHtml;
