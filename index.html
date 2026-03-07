@@ -189,7 +189,7 @@
     </div>
 
     <script>
-        const apiKey = ""; // Keep empty for environment auth
+        const apiKey = ""; // Auth key is handled by the environment
         let inventory = [];
         const video = document.getElementById('video');
         const previewCanvas = document.getElementById('captured-preview');
@@ -223,20 +223,15 @@
         async function captureAndAnalyze() {
             if (statusBadge.innerText.includes("PROCESSING")) return;
 
-            // 1. Capture the exact frame
             const ctx = previewCanvas.getContext('2d');
             previewCanvas.width = video.videoWidth;
             previewCanvas.height = video.videoHeight;
             ctx.drawImage(video, 0, 0);
             
-            // 2. Show frozen frame
             previewCanvas.style.display = 'block';
-            
-            // 3. Shutter effect
             document.getElementById('shutter-flash').classList.add('flash-active');
             setTimeout(() => document.getElementById('shutter-flash').classList.remove('flash-active'), 400);
 
-            // 4. UI Feedback
             statusBadge.innerText = "AI PROCESSING...";
             statusBadge.className = "px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-blue-600 text-white shadow-sm";
             
@@ -244,34 +239,45 @@
             const originalHtml = btn.innerHTML;
             btn.innerHTML = `<div class="loading-ring"></div> <span class="text-xl font-black italic">ANALYZING...</span>`;
 
-            // 5. Get Image Data
             const base64Image = previewCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
-
-            // 6. AI Logic
             const userInstructions = document.getElementById('ai-instructions').value;
             const prompt = `${userInstructions}
             Format your response strictly as a JSON list of objects: [{"name": "Item Name", "qty": 5}]. 
             If nothing is found, return []. Be descriptive but concise with item names.`;
 
             try {
+                // Correct endpoint for the environment using automatic auth
                 const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: [{ role: "user", parts: [ { text: prompt }, { inlineData: { mimeType: "image/jpeg", data: base64Image } } ] }],
-                        generationConfig: { responseMimeType: "application/json" }
+                        generationConfig: { 
+                            responseMimeType: "application/json",
+                            responseSchema: {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        name: { type: "STRING" },
+                                        qty: { type: "NUMBER" }
+                                    },
+                                    required: ["name", "qty"]
+                                }
+                            }
+                        }
                     })
                 });
                 
                 if (!response.ok) {
-                    const errorBody = await response.text();
-                    throw new Error(`API returned ${response.status}: ${errorBody}`);
+                    const errorData = await response.json();
+                    throw new Error(errorData.error?.message || `API Error ${response.status}`);
                 }
 
                 const data = await response.json();
                 const textResult = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
-                if (!textResult) throw new Error("No response content from AI");
+                if (!textResult) throw new Error("No inventory detected");
 
                 const results = JSON.parse(textResult || "[]");
                 
@@ -283,7 +289,7 @@
                 }
             } catch (err) {
                 console.error("AI Analysis Error:", err);
-                showToast("ANALYSIS ERROR: " + err.message.substring(0, 50));
+                showToast(err.message.includes("403") ? "AUTH ERROR: Use official Preview button" : "ANALYSIS ERROR: " + err.message);
             } finally {
                 previewCanvas.style.display = 'none';
                 statusBadge.innerText = "System Ready";
@@ -355,7 +361,6 @@
         async function fetchWithRetry(url, options, retries = 5, backoff = 1000) {
             try {
                 const response = await fetch(url, options);
-                // Only throw and retry if it's a transient server error or rate limit
                 if (!response.ok && (response.status >= 500 || response.status === 429)) {
                     throw new Error(`Server error ${response.status}`);
                 }
