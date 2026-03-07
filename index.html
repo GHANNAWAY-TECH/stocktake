@@ -184,12 +184,12 @@
         </div>
     </div>
 
-    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-8 py-4 rounded-2xl shadow-2xl opacity-0 transition-opacity pointer-events-none z-[200] font-bold italic tracking-tight">
+    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-8 py-4 rounded-2xl shadow-2xl opacity-0 transition-opacity pointer-events-none z-[200] font-bold italic tracking-tight text-center max-w-[90vw]">
         Processing...
     </div>
 
     <script>
-        const apiKey = ""; // API Key provided by environment
+        const apiKey = ""; // Keep empty for environment auth
         let inventory = [];
         const video = document.getElementById('video');
         const previewCanvas = document.getElementById('captured-preview');
@@ -223,20 +223,20 @@
         async function captureAndAnalyze() {
             if (statusBadge.innerText.includes("PROCESSING")) return;
 
-            // 1. Immediately capture the frame onto the canvas
+            // 1. Capture the exact frame
             const ctx = previewCanvas.getContext('2d');
             previewCanvas.width = video.videoWidth;
             previewCanvas.height = video.videoHeight;
             ctx.drawImage(video, 0, 0);
             
-            // 2. Display the frozen frame to the user so they know what was captured
+            // 2. Show frozen frame
             previewCanvas.style.display = 'block';
             
-            // 3. Trigger Shutter Effect
+            // 3. Shutter effect
             document.getElementById('shutter-flash').classList.add('flash-active');
             setTimeout(() => document.getElementById('shutter-flash').classList.remove('flash-active'), 400);
 
-            // 4. Set UI States
+            // 4. UI Feedback
             statusBadge.innerText = "AI PROCESSING...";
             statusBadge.className = "px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-blue-600 text-white shadow-sm";
             
@@ -244,10 +244,10 @@
             const originalHtml = btn.innerHTML;
             btn.innerHTML = `<div class="loading-ring"></div> <span class="text-xl font-black italic">ANALYZING...</span>`;
 
-            // 5. Extract the base64 data from the canvas (the actual photo taken)
+            // 5. Get Image Data
             const base64Image = previewCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
 
-            // 6. AI Prompt
+            // 6. AI Logic
             const userInstructions = document.getElementById('ai-instructions').value;
             const prompt = `${userInstructions}
             Format your response strictly as a JSON list of objects: [{"name": "Item Name", "qty": 5}]. 
@@ -263,8 +263,17 @@
                     })
                 });
                 
+                if (!response.ok) {
+                    const errorBody = await response.text();
+                    throw new Error(`API returned ${response.status}: ${errorBody}`);
+                }
+
                 const data = await response.json();
-                const results = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text || "[]");
+                const textResult = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                
+                if (!textResult) throw new Error("No response content from AI");
+
+                const results = JSON.parse(textResult || "[]");
                 
                 if (results.length > 0) {
                     results.forEach(item => processEntry(item.name, item.qty));
@@ -273,10 +282,9 @@
                     showToast("NO ITEMS IDENTIFIED");
                 }
             } catch (err) {
-                console.error(err);
-                showToast("ANALYSIS ERROR");
+                console.error("AI Analysis Error:", err);
+                showToast("ANALYSIS ERROR: " + err.message.substring(0, 50));
             } finally {
-                // Return to live view and reset buttons
                 previewCanvas.style.display = 'none';
                 statusBadge.innerText = "System Ready";
                 statusBadge.className = "px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-green-100 text-green-700 shadow-sm border border-green-200";
@@ -347,7 +355,10 @@
         async function fetchWithRetry(url, options, retries = 5, backoff = 1000) {
             try {
                 const response = await fetch(url, options);
-                if (!response.ok) throw new Error(response.statusText);
+                // Only throw and retry if it's a transient server error or rate limit
+                if (!response.ok && (response.status >= 500 || response.status === 429)) {
+                    throw new Error(`Server error ${response.status}`);
+                }
                 return response;
             } catch (err) {
                 if (retries <= 0) throw err;
@@ -360,7 +371,7 @@
             const toast = document.getElementById('toast');
             toast.innerText = msg;
             toast.style.opacity = "1";
-            setTimeout(() => toast.style.opacity = "0", 3000);
+            setTimeout(() => toast.style.opacity = "0", 4000);
         }
 
         function exportData() {
