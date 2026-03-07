@@ -31,7 +31,7 @@
             box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.5);
             pointer-events: none;
             border-radius: 8px;
-            display: none; /* Hidden until camera starts */
+            display: none; 
         }
         .scan-line {
             position: absolute;
@@ -40,6 +40,19 @@
             background: #ef4444;
             top: 0;
             animation: scan 2s linear infinite;
+        }
+        /* Detection Zone indicator for Fixed Counting */
+        .detection-gate {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: rgba(34, 197, 94, 0.5);
+            border-top: 1px solid #22c55e;
+            border-bottom: 1px solid #22c55e;
+            display: none;
+            z-index: 10;
         }
         @keyframes scan {
             0% { top: 0; }
@@ -65,25 +78,29 @@
         <header class="flex justify-between items-center mb-8">
             <div>
                 <h1 class="text-2xl font-bold text-slate-900">GTS Stock Taker</h1>
-                <p class="text-sm text-slate-500">Professional Inventory Management</p>
+                <p class="text-sm text-slate-500">Advanced Inventory Logic</p>
             </div>
-            <div id="status-badge" class="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                System Ready
+            <div class="flex flex-col items-end gap-2">
+                <div id="status-badge" class="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                    System Ready
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="text-xs font-bold text-slate-500 uppercase">Fixed Counting Mode</label>
+                    <input type="checkbox" id="fixed-mode" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500" onchange="toggleFixedMode()">
+                </div>
             </div>
         </header>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <!-- Left Side: Scanner & Controls -->
             <section class="space-y-6">
                 <div class="scanner-container aspect-video">
-                    <!-- Permission Overlay -->
                     <div id="permission-prompt">
                         <svg class="w-12 h-12 mb-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
                         </svg>
                         <h3 class="font-bold text-lg mb-2">Camera Access Required</h3>
-                        <p class="text-sm text-slate-400 mb-6">Tap start to scan barcodes and identify items.</p>
+                        <p class="text-sm text-slate-400 mb-6">Start GTS Stock Taker Logic</p>
                         <button onclick="requestCameraPermission()" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-full font-bold transition-transform active:scale-95 shadow-lg">
                             Start Scanner
                         </button>
@@ -93,6 +110,7 @@
                     <div id="scanner-visuals" class="scan-overlay">
                         <div class="scan-line"></div>
                     </div>
+                    <div id="detection-gate" class="detection-gate"></div>
                 </div>
 
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
@@ -116,7 +134,6 @@
                 </div>
             </section>
 
-            <!-- Right Side: Inventory List -->
             <section class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit">
                 <div class="flex justify-between items-center mb-6">
                     <h2 class="font-bold text-lg">Current Session</h2>
@@ -139,19 +156,30 @@
         </div>
     </div>
 
-    <!-- UI Feedback Toast -->
     <div id="toast" class="fixed bottom-4 right-4 bg-slate-800 text-white px-6 py-3 rounded-lg shadow-xl opacity-0 transition-opacity pointer-events-none">
         Item added successfully
     </div>
 
     <script>
-        const apiKey = ""; // Environment handles this
+        const apiKey = ""; 
         let inventory = [];
         const video = document.getElementById('video');
         const inventoryList = document.getElementById('inventory-list');
         const totalCountDisplay = document.getElementById('total-count');
+        const detectionGate = document.getElementById('detection-gate');
 
-        // 1. Explicit Permission Request (Required for Mobile UX)
+        // State for "Fixed Position" logic
+        let isFixedMode = false;
+        let lastDetectedValue = null;
+        let detectionTimestamp = 0;
+        const DETECTION_COOLDOWN = 3000; // 3 seconds before same item counts again
+
+        function toggleFixedMode() {
+            isFixedMode = document.getElementById('fixed-mode').checked;
+            detectionGate.style.display = isFixedMode ? 'block' : 'none';
+            showToast(isFixedMode ? "Fixed Mode Active: One count per item" : "Free Scan Mode Active");
+        }
+
         async function requestCameraPermission() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -161,33 +189,20 @@
                         height: { ideal: 720 }
                     } 
                 });
-                
                 video.srcObject = stream;
-                
-                // Hide prompt, show scanner visuals
                 document.getElementById('permission-prompt').style.display = 'none';
                 document.getElementById('scanner-visuals').style.display = 'block';
-                
-                // Enable AI button once camera is live
                 const aiBtn = document.getElementById('ai-btn');
                 aiBtn.disabled = false;
                 aiBtn.className = "w-full border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium py-2 rounded-lg transition-colors flex items-center justify-center gap-2";
-
                 initScanner();
-                showToast("Camera active");
             } catch (err) {
-                console.error("Error accessing camera: ", err);
-                showToast("Could not access camera. Please check browser settings.");
+                showToast("Camera access denied.");
             }
         }
 
-        // 2. Barcode Scanning Logic
         async function initScanner() {
-            if (!('BarcodeDetector' in window)) {
-                console.warn('Barcode Detector API not supported on this browser.');
-                return;
-            }
-
+            if (!('BarcodeDetector' in window)) return;
             const detector = new BarcodeDetector({ formats: ['qr_code', 'ean_13', 'code_128', 'ean_8'] });
             
             async function scanFrame() {
@@ -196,20 +211,34 @@
                         const barcodes = await detector.detect(video);
                         if (barcodes.length > 0) {
                             const code = barcodes[0].rawValue;
-                            handleScannedItem(code);
-                            // Simple debounce to prevent duplicate immediate scans
-                            await new Promise(r => setTimeout(r, 2000));
+                            
+                            if (isFixedMode) {
+                                // Logic: Only count if it's a new code OR enough time has passed
+                                // This simulates the "passing through" logic
+                                const now = Date.now();
+                                if (code !== lastDetectedValue || (now - detectionTimestamp > DETECTION_COOLDOWN)) {
+                                    handleScannedItem(code);
+                                    lastDetectedValue = code;
+                                    detectionTimestamp = now;
+                                }
+                            } else {
+                                handleScannedItem(code);
+                                await new Promise(r => setTimeout(r, 2000));
+                            }
+                        } else {
+                            // If no barcode is seen for a bit in fixed mode, reset the "last seen" 
+                            // This allows the same item to be scanned again if it was removed and returned
+                            if (isFixedMode && (Date.now() - detectionTimestamp > 1500)) {
+                                lastDetectedValue = null;
+                            }
                         }
-                    } catch (e) {
-                        // Detector sometimes fails on empty frames
-                    }
+                    } catch (e) {}
                 }
                 requestAnimationFrame(scanFrame);
             }
             scanFrame();
         }
 
-        // 3. Stock Management
         function handleScannedItem(barcode) {
             document.getElementById('item-name').value = barcode;
             addToStock(barcode);
@@ -220,7 +249,6 @@
             const qtyInput = document.getElementById('item-qty');
             const name = customName || nameInput.value;
             const qty = parseInt(qtyInput.value);
-
             if (!name) return;
 
             const existing = inventory.find(i => i.name === name);
@@ -228,18 +256,12 @@
                 existing.qty += qty;
                 existing.timestamp = new Date().toLocaleTimeString();
             } else {
-                inventory.unshift({
-                    id: Date.now(),
-                    name: name,
-                    qty: qty,
-                    timestamp: new Date().toLocaleTimeString()
-                });
+                inventory.unshift({ id: Date.now(), name: name, qty: qty, timestamp: new Date().toLocaleTimeString() });
             }
-
             updateUI();
-            nameInput.value = "";
+            if(!customName) nameInput.value = "";
             qtyInput.value = "1";
-            showToast(`Added ${qty} x ${name}`);
+            showToast(`Counted: ${name}`);
         }
 
         function removeFromStock(id) {
@@ -253,12 +275,11 @@
                 totalCountDisplay.innerText = "0";
                 return;
             }
-
             inventoryList.innerHTML = inventory.map(item => `
                 <div class="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-100 group">
                     <div class="flex-1">
                         <h4 class="font-semibold text-slate-800">${item.name}</h4>
-                        <p class="text-xs text-slate-500">Last updated: ${item.timestamp}</p>
+                        <p class="text-xs text-slate-500">${item.timestamp}</p>
                     </div>
                     <div class="flex items-center gap-4">
                         <span class="bg-blue-100 text-blue-700 px-3 py-1 rounded font-bold">×${item.qty}</span>
@@ -268,56 +289,33 @@
                     </div>
                 </div>
             `).join('');
-
             totalCountDisplay.innerText = inventory.reduce((sum, item) => sum + item.qty, 0);
         }
 
-        // 4. Gemini AI Integration
         async function analyzeWithAI() {
             if (!video.srcObject) return;
-            
             const statusBadge = document.getElementById('status-badge');
             statusBadge.innerText = "AI Processing...";
             statusBadge.className = "px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700";
-
             const canvas = document.createElement('canvas');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             canvas.getContext('2d').drawImage(video, 0, 0);
             const base64Image = canvas.toDataURL('image/png').split(',')[1];
-
             const prompt = "Identify the product in this image. Return ONLY the name of the product. If you can't see a clear product, say 'Unidentified Item'.";
-            
             try {
-                const response = await fetchWithRetry(
-                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
-                    {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            contents: [{
-                                role: "user",
-                                parts: [
-                                    { text: prompt },
-                                    { inlineData: { mimeType: "image/png", data: base64Image } }
-                                ]
-                            }]
-                        })
-                    }
-                );
-
+                const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ role: "user", parts: [ { text: prompt }, { inlineData: { mimeType: "image/png", data: base64Image } } ] }] })
+                });
                 const data = await response.json();
                 const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-                
                 if (resultText && resultText !== "Unidentified Item") {
                     document.getElementById('item-name').value = resultText;
                     showToast(`AI Suggestion: ${resultText}`);
-                } else {
-                    showToast("AI couldn't identify the item clearly.");
                 }
-
             } catch (err) {
-                console.error(err);
                 showToast("AI Analysis failed.");
             } finally {
                 statusBadge.innerText = "System Ready";
@@ -347,9 +345,7 @@
         function exportData() {
             if (inventory.length === 0) return;
             let csvContent = "data:text/csv;charset=utf-8,Name,Quantity,Time\n";
-            inventory.forEach(i => {
-                csvContent += `"${i.name}",${i.qty},${i.timestamp}\n`;
-            });
+            inventory.forEach(i => { csvContent += `"${i.name}",${i.qty},${i.timestamp}\n`; });
             const encodedUri = encodeURI(csvContent);
             const link = document.createElement("a");
             link.setAttribute("href", encodedUri);
